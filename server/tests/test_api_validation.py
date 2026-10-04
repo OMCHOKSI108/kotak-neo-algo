@@ -29,9 +29,8 @@ async def test_admin_rbac_and_user_creation(client: AsyncClient, admin_token: st
     created = resp.json()
     assert created["email"] == unique_email
     assert created["role"] == "user"
-    # Ensure masked identifier exists
-    assert len(created["broker_accounts"]) > 0
-    assert "MOCK" in created["broker_accounts"][0]["masked_identifier"]
+    # Users start with 0 connected broker accounts until linking Kotak Neo
+    assert created["broker_accounts"] == []
 
 
 @pytest.mark.asyncio

@@ -16,7 +16,7 @@ export const BrokerSettingsPage: React.FC = () => {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Broker selection
-  const [selectedBroker, setSelectedBroker] = useState<'KOTAK_NEO' | 'MOCK_BROKER' | 'UPSTOX' | 'FYERS'>('KOTAK_NEO');
+  const [selectedBroker, setSelectedBroker] = useState<'KOTAK_NEO' | 'UPSTOX' | 'FYERS'>('KOTAK_NEO');
 
   // Connection form state
   const [accountName, setAccountName] = useState('My Kotak Account');
@@ -206,7 +206,7 @@ export const BrokerSettingsPage: React.FC = () => {
 
         {accounts.length === 0 ? (
           <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500 shadow-xs text-xs">
-            <p>No broker account linked. Use the form below to connect Kotak Neo or start a simulation.</p>
+            <p>No broker account linked. Use the form below to connect your Kotak Neo account.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -223,7 +223,7 @@ export const BrokerSettingsPage: React.FC = () => {
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-bold text-gray-900">
-                          {acc.broker === 'KOTAK_NEO' ? 'Kotak Neo' : acc.broker === 'MOCK_BROKER' ? 'Mock Broker' : acc.broker}
+                          {acc.broker === 'KOTAK_NEO' ? 'Kotak Neo' : acc.broker}
                         </span>
                         <span
                           className={`text-[10px] font-bold px-2 py-0.2 rounded-full border ${
@@ -307,7 +307,7 @@ export const BrokerSettingsPage: React.FC = () => {
         </div>
 
         {/* Broker Selector Tabs */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <button
             type="button"
             onClick={() => setSelectedBroker('KOTAK_NEO')}
@@ -324,22 +324,6 @@ export const BrokerSettingsPage: React.FC = () => {
             <span className="text-[10px] text-blue-700 font-medium">Live Broker</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setSelectedBroker('MOCK_BROKER')}
-            className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all ${
-              selectedBroker === 'MOCK_BROKER'
-                ? 'bg-blue-50 border-blue-600 text-blue-900 font-bold'
-                : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-bold">Mock Broker</span>
-              {selectedBroker === 'MOCK_BROKER' && <Check className="w-3.5 h-3.5 text-blue-600" />}
-            </div>
-            <span className="text-[10px] text-amber-700 font-medium">Paper Mode</span>
-          </button>
-
           <div className="p-3 rounded-xl border border-gray-200 bg-gray-50 text-gray-400 opacity-60 cursor-not-allowed">
             <span className="text-xs font-medium block">Upstox</span>
             <span className="text-[10px]">Coming Soon</span>
@@ -353,8 +337,7 @@ export const BrokerSettingsPage: React.FC = () => {
 
         {/* Connection Form */}
         <form onSubmit={handleConnect} className="space-y-4 pt-1">
-          {selectedBroker === 'KOTAK_NEO' ? (
-            <div className="space-y-3">
+          <div className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">
                   Account Name
@@ -460,14 +443,6 @@ export const BrokerSettingsPage: React.FC = () => {
                 </div>
               </div>
             </div>
-          ) : (
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-1">
-              <span className="font-semibold text-xs text-gray-800">Mock Paper Trading Sandbox</span>
-              <p className="text-xs text-gray-500">
-                Connects a simulated local environment with live tick updates for NIFTY, BANKNIFTY, SENSEX, and top NSE stocks.
-              </p>
-            </div>
-          )}
 
           <div className="pt-2">
             <button
@@ -478,12 +453,10 @@ export const BrokerSettingsPage: React.FC = () => {
               {actionLoading ? (
                 <>
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>Connecting...</span>
+                  <span>Authenticating with Kotak Neo...</span>
                 </>
               ) : (
-                <span>
-                  {selectedBroker === 'KOTAK_NEO' ? 'Connect Kotak Neo' : 'Connect Mock Broker'}
-                </span>
+                <span>Connect Kotak Neo</span>
               )}
             </button>
           </div>

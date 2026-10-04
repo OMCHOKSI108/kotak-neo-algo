@@ -32,26 +32,15 @@ async def init_db():
             session.add(admin_user)
             await session.flush()
 
-            # Create default Mock Broker account for immediate testing
-            mock_account = BrokerAccount(
-                user_id=admin_user.id,
-                broker="MOCK_BROKER",
-                account_name="Paper / Simulated Broker",
-                status="CONNECTED",
-                masked_identifier="MOCK-PAPER-001",
-                session_metadata={"status": "connected", "type": "simulator"}
-            )
-            session.add(mock_account)
-
             # Audit log
             audit = AuditLog(
                 user_id=admin_user.id,
                 action="SYSTEM_BOOTSTRAP",
-                details={"message": "Database initialized, admin account & mock broker seeded."}
+                details={"message": "Database initialized, admin account seeded."}
             )
             session.add(audit)
 
             await session.commit()
-            logger.info("Default administrator and mock broker successfully created.")
+            logger.info("Default administrator successfully created.")
         else:
             logger.info("Administrator account already exists.")

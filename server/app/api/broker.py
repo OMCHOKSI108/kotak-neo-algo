@@ -287,56 +287,11 @@ async def connect_broker(
         )
 
     elif broker_type in ("MOCK_BROKER", "MOCK", "PAPER"):
-        # Mock broker connection for simulation / testing
-        now = datetime.now(timezone.utc)
-        masked_id = f"MOCK-PAPER-{str(user.id).zfill(3)}"
-
-        stmt = select(BrokerAccount).where(
-            BrokerAccount.user_id == user.id,
-            BrokerAccount.broker.in_(["MOCK_BROKER", "mock_broker"])
-        )
-        result = await db.execute(stmt)
-        account = result.scalar_one_or_none()
-
-        if not account:
-            account = BrokerAccount(
-                user_id=user.id,
-                broker="MOCK_BROKER",
-                account_name=req.account_name or "Paper Trading Sandbox",
-                status="CONNECTED",
-                last_authenticated_at=now,
-                last_heartbeat_at=now,
-                masked_identifier=masked_id,
-                session_metadata={"environment": "simulation"}
-            )
-            db.add(account)
-        else:
-            account.status = "CONNECTED"
-            account.last_authenticated_at = now
-            account.last_heartbeat_at = now
-            account.masked_identifier = masked_id
-
-        adapter = get_broker_adapter("mock_broker", account_id=user.id)
-        market_service.set_adapter(adapter)
-
-        audit_mock = AuditLog(
-            user_id=user.id,
-            action="BROKER_CONNECT_SUCCESS",
-            details={"broker": "MOCK_BROKER", "masked_identifier": masked_id}
-        )
-        db.add(audit_mock)
-        await db.commit()
-        await db.refresh(account)
-
         return SanitizedBrokerConnectResponse(
-            success=True,
+            success=False,
             broker="MOCK_BROKER",
-            status="CONNECTED",
-            account=masked_id,
-            account_id=account.id,
-            connected_at=now.isoformat(),
-            last_verified_at=now.isoformat(),
-            message="Mock paper trading broker connected."
+            status="FAILED",
+            message="Mock paper broker has been removed. Only real brokers (Kotak Neo) are supported."
         )
 
     elif broker_type in ("UPSTOX", "FYERS", "DHAN", "ZERODHA"):
@@ -344,7 +299,7 @@ async def connect_broker(
             success=False,
             broker=broker_type,
             status="FAILED",
-            message=f"Broker {broker_type} adapter is coming soon. Currently supported: KOTAK_NEO, MOCK_BROKER."
+            message=f"Broker {broker_type} adapter is coming soon. Currently supported: KOTAK_NEO."
         )
     else:
         return SanitizedBrokerConnectResponse(
@@ -444,19 +399,6 @@ async def reconnect_broker_account(
             detail="Broker account not found."
         )
 
-    if account.broker in ("MOCK_BROKER", "mock_broker"):
-        account.status = "CONNECTED"
-        account.last_authenticated_at = datetime.now(timezone.utc)
-        await db.commit()
-        return SanitizedBrokerConnectResponse(
-            success=True,
-            broker=account.broker,
-            status="CONNECTED",
-            account=account.masked_identifier,
-            account_id=account.id,
-            connected_at=account.last_authenticated_at.isoformat(),
-            message="Mock paper broker reconnected."
-        )
 
     # For Kotak Neo: decrypt long-lived credentials in memory
     try:

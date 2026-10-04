@@ -4,7 +4,7 @@ from typing import Dict, List, Set, Optional, Any
 from fastapi import WebSocket
 from app.broker.base import BrokerAdapter
 from app.broker.schemas import Quote, OptionChain
-from app.broker.mock_adapter import MockBrokerAdapter
+from app.broker.kotak_adapter import KotakNeoAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ class MarketDataService:
     """
 
     def __init__(self, adapter: Optional[BrokerAdapter] = None):
-        self._adapter: BrokerAdapter = adapter or MockBrokerAdapter()
+        self._adapter: BrokerAdapter = adapter or KotakNeoAdapter()
         self._cached_quotes: Dict[str, Quote] = {}
         self._active_connections: Set[WebSocket] = set()
         self._lock = asyncio.Lock()

@@ -185,7 +185,7 @@ export const AdminDashboard: React.FC = () => {
                                 className={`w-2.5 h-2.5 ${ba.is_connected ? 'text-emerald-600' : 'text-gray-400'}`}
                               />
                               <span className="font-semibold text-gray-900">
-                                {ba.broker_name === 'kotak_neo' || ba.broker === 'KOTAK_NEO' ? 'Kotak Neo' : 'Mock'}:
+                                {ba.broker_name === 'kotak_neo' || ba.broker === 'KOTAK_NEO' ? 'Kotak Neo' : ba.broker}:
                               </span>
                               <span className="text-gray-600 font-mono font-medium">{ba.masked_identifier}</span>
                             </div>

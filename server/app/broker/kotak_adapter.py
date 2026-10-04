@@ -1,7 +1,9 @@
 import asyncio
 import logging
+import urllib.parse
 from datetime import datetime, timezone
 from typing import List, Optional, Callable, Dict, Any
+import httpx
 
 from app.broker.base import BrokerAdapter
 from app.broker.schemas import (
@@ -21,6 +23,39 @@ try:
 except ImportError:
     KOTAK_SDK_AVAILABLE = False
     logger.warning("kotakneoapi / neo_api_client is not installed or available.")
+
+# Canonical symbol mapping for Kotak Neo API queries: (exchange_segment, query_id, canonical_display_name)
+KOTAK_SYMBOL_MAP = {
+    "NIFTY 50": ("nse_cm", "Nifty 50", "NIFTY 50"),
+    "NIFTY": ("nse_cm", "Nifty 50", "NIFTY 50"),
+    "BANKNIFTY": ("nse_cm", "Nifty Bank", "BANKNIFTY"),
+    "NIFTY BANK": ("nse_cm", "Nifty Bank", "BANKNIFTY"),
+    "SENSEX": ("bse_cm", "SENSEX", "SENSEX"),
+    "RELIANCE": ("nse_cm", "2885", "RELIANCE"),
+    "HDFCBANK": ("nse_cm", "1333", "HDFCBANK"),
+    "ICICIBANK": ("nse_cm", "4963", "ICICIBANK"),
+    "TCS": ("nse_cm", "11536", "TCS"),
+    "INFY": ("nse_cm", "1594", "INFY"),
+}
+
+KOTAK_REVERSE_MAP = {
+    "Nifty 50-IN": "NIFTY 50",
+    "Nifty 50": "NIFTY 50",
+    "Nifty Bank-IN": "BANKNIFTY",
+    "Nifty Bank": "BANKNIFTY",
+    "SENSEX-IN": "SENSEX",
+    "SENSEX": "SENSEX",
+    "RELIANCE-EQ": "RELIANCE",
+    "2885": "RELIANCE",
+    "HDFCBANK-EQ": "HDFCBANK",
+    "1333": "HDFCBANK",
+    "ICICIBANK-EQ": "ICICIBANK",
+    "4963": "ICICIBANK",
+    "TCS-EQ": "TCS",
+    "11536": "TCS",
+    "INFY-EQ": "INFY",
+    "1594": "INFY",
+}
 
 
 class KotakNeoAdapter(BrokerAdapter):
@@ -42,6 +77,7 @@ class KotakNeoAdapter(BrokerAdapter):
         self._session_data: Dict[str, Any] = {}
         self._subscribers: Dict[str, List[Callable[[Quote], Any]]] = {}
         self._ws_task: Optional[asyncio.Task] = None
+        self._poll_task: Optional[asyncio.Task] = None
 
         # Pre-seed credentials from settings if available (and not placeholder)
         if not self._credentials:
@@ -187,163 +223,197 @@ class KotakNeoAdapter(BrokerAdapter):
             )
 
     async def get_quotes(self, symbols: List[str]) -> List[Quote]:
-        if not self._connected or not self._client:
-            # Return placeholder quotes if not authenticated with live Kotak
+        consumer_key = self._credentials.get("consumer_key") or settings.KOTAK_CONSUMER_KEY
+        base_url = self._credentials.get("base_url") or "https://cis.kotaksecurities.com"
+
+        if not consumer_key or not symbols:
             return [
                 Quote(symbol=s, exchange="NSE", ltp=0.0, prev_close=0.0)
                 for s in symbols
             ]
 
-        loop = asyncio.get_running_loop()
+        # Build comma-separated query for Kotak Neo API
+        queries = []
+        for s in symbols:
+            s_clean = s.strip().upper()
+            if s_clean in KOTAK_SYMBOL_MAP:
+                seg, q_id, _ = KOTAK_SYMBOL_MAP[s_clean]
+                queries.append(f"{seg}|{q_id}")
+            elif "|" in s:
+                queries.append(s)
+            else:
+                queries.append(f"nse_cm|{s}")
+
+        # Join queries (up to 50 allowed per call)
+        query_str = ",".join(queries[:50])
+        # URL encode path parameter while keeping | and , literal
+        encoded_query = urllib.parse.quote(query_str, safe="|,")
+        url = f"{base_url}/script-details/1.0/quotes/neosymbol/{encoded_query}/all"
+        headers = {
+            "Authorization": consumer_key,
+            "Content-Type": "application/json"
+        }
+
         try:
-            # Map symbols to Kotak instrument token dictionaries
-            # Format: [{"instrument_token": "...", "exchange_segment": "nse_cm"}]
-            # Up to 50 instruments per request as per Kotak specification
-            tokens = []
-            for s in symbols:
-                tokens.append({"instrument_token": s, "exchange_segment": "nse_cm"})
+            async with httpx.AsyncClient(timeout=12.0) as client:
+                resp = await client.get(url, headers=headers)
+                if resp.status_code != 200:
+                    logger.warning("Kotak quotes returned HTTP %d: %s", resp.status_code, resp.text[:200])
+                    return []
 
-            raw_quotes = await loop.run_in_executor(
-                None,
-                lambda: self._client.quotes(instrument_tokens=tokens, quote_type="all")
-            )
+                raw_quotes = resp.json()
+                results: List[Quote] = []
+                if isinstance(raw_quotes, list):
+                    for item in raw_quotes:
+                        ohlc = item.get("ohlc", {})
+                        ltp = float(item.get("ltp", 0.0))
+                        pc = float(ohlc.get("close", 0.0)) or ltp
+                        chg = float(item.get("change", ltp - pc))
+                        chg_pct = float(item.get("per_change", 0.0))
 
-            results: List[Quote] = []
-            if isinstance(raw_quotes, list):
-                for item in raw_quotes:
-                    ohlc = item.get("ohlc", {})
-                    ltp = float(item.get("ltp", 0.0))
-                    pc = float(ohlc.get("close", 0.0)) or ltp
-                    chg = float(item.get("change", ltp - pc))
-                    chg_pct = float(item.get("per_change", 0.0))
+                        # Map back to standard canonical symbol name
+                        disp_sym = item.get("display_symbol", "")
+                        exch_token = item.get("exchange_token", "")
+                        canonical_sym = KOTAK_REVERSE_MAP.get(disp_sym) or KOTAK_REVERSE_MAP.get(exch_token) or disp_sym or exch_token
 
-                    results.append(
-                        Quote(
-                            symbol=item.get("display_symbol", item.get("exchange_token", "")),
-                            exchange=item.get("exchange", "NSE"),
-                            token=item.get("exchange_token"),
-                            ltp=ltp,
-                            open=float(ohlc.get("open", 0.0)),
-                            high=float(ohlc.get("high", 0.0)),
-                            low=float(ohlc.get("low", 0.0)),
-                            close=float(ohlc.get("close", 0.0)),
-                            prev_close=pc,
-                            change=chg,
-                            change_percent=chg_pct,
-                            volume=int(item.get("last_volume", 0)),
-                            bid=float(item.get("depth", {}).get("buy", [{}])[0].get("price", 0.0)) if item.get("depth") else None,
-                            ask=float(item.get("depth", {}).get("sell", [{}])[0].get("price", 0.0)) if item.get("depth") else None,
-                            depth=item.get("depth")
+                        results.append(
+                            Quote(
+                                symbol=canonical_sym,
+                                exchange=item.get("exchange", "NSE"),
+                                token=exch_token,
+                                ltp=ltp,
+                                open=float(ohlc.get("open", 0.0)),
+                                high=float(ohlc.get("high", 0.0)),
+                                low=float(ohlc.get("low", 0.0)),
+                                close=float(ohlc.get("close", 0.0)) if ohlc.get("close") else None,
+                                prev_close=pc,
+                                change=chg,
+                                change_percent=chg_pct,
+                                volume=int(float(item.get("last_volume", 0))),
+                                last_trade_time=datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                                bid=float(item.get("depth", {}).get("buy", [{}])[0].get("price", 0.0)) if item.get("depth") and item.get("depth", {}).get("buy") else None,
+                                ask=float(item.get("depth", {}).get("sell", [{}])[0].get("price", 0.0)) if item.get("depth") and item.get("depth", {}).get("sell") else None,
+                                depth=item.get("depth")
+                            )
                         )
-                    )
-            return results
+                return results
         except Exception as e:
-            logger.error("Error fetching Kotak quotes: %s", e)
+            logger.error("Error fetching real Kotak quotes: %s", e)
             return []
 
     async def get_expiries(self, underlying: str) -> List[str]:
-        if not self._connected or not self._client:
+        consumer_key = self._credentials.get("consumer_key") or settings.KOTAK_CONSUMER_KEY
+        if not consumer_key:
             return []
-        loop = asyncio.get_running_loop()
+        und = underlying.strip().upper()
+        exchange = "bse_fo" if "SENSEX" in und else "nse_fo"
+        base_url = self._credentials.get("base_url") or "https://cis.kotaksecurities.com"
+        url = f"{base_url}/market-data/1.0/watchlist/expiries?exchange={exchange}&underlying={und}"
+        headers = {"Authorization": consumer_key, "Content-Type": "application/json"}
         try:
-            resp = await loop.run_in_executor(
-                None,
-                lambda: self._client.expiries(exchange="nse_fo", underlying=underlying.upper())
-            )
-            if isinstance(resp, dict) and "data" in resp:
-                return resp["data"]
-            elif isinstance(resp, list):
-                return resp
-            return []
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(url, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return data.get("expiries", [])
         except Exception as e:
             logger.error("Error fetching Kotak expiries: %s", e)
-            return []
+        return []
 
     async def get_option_chain(self, underlying: str, expiry: Optional[str] = None) -> OptionChain:
-        if not self._connected or not self._client:
-            return OptionChain(underlying=underlying, underlying_ltp=0.0, expiry=expiry or "")
+        consumer_key = self._credentials.get("consumer_key") or settings.KOTAK_CONSUMER_KEY
+        und = underlying.strip().upper()
+        if not consumer_key:
+            return OptionChain(underlying=und, underlying_ltp=0.0, expiry=expiry or "")
 
-        loop = asyncio.get_running_loop()
+        exchange = "bse_fo" if "SENSEX" in und else "nse_fo"
+        base_url = self._credentials.get("base_url") or "https://cis.kotaksecurities.com"
+        url = f"{base_url}/market-data/1.0/watchlist/option-chain?exchange={exchange}&underlying={und}"
+        if expiry:
+            url += f"&expiry={expiry}"
+
+        headers = {"Authorization": consumer_key, "Content-Type": "application/json"}
         try:
-            resp = await loop.run_in_executor(
-                None,
-                lambda: self._client.option_chain(
-                    exchange="nse_fo",
-                    underlying=underlying.upper(),
-                    expiry=expiry,
-                    instrument_type="option",
-                    count=40
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.get(url, headers=headers)
+                if resp.status_code != 200:
+                    logger.warning("Kotak option chain HTTP %d: %s", resp.status_code, resp.text[:200])
+                    return OptionChain(underlying=und, underlying_ltp=0.0, expiry=expiry or "")
+
+                data = resp.json()
+                spot = data.get("spot", {})
+                und_ltp = float(spot.get("ltp", 0.0))
+                common = data.get("common_data", {})
+                lot_size = int(common.get("mktLot", 50 if "NIFTY" in und else 15 if "BANK" in und else 10))
+                exp_date = common.get("expiryDt", expiry or "")
+
+                call_items = {item["inst"]["strkPrc"]: item for item in data.get("call", []) if "inst" in item}
+                put_items = {item["inst"]["strkPrc"]: item for item in data.get("put", []) if "inst" in item}
+
+                all_strikes = sorted(set(call_items.keys()) | set(put_items.keys()), key=lambda x: float(x))
+                strikes: List[OptionStrike] = []
+
+                for s_str in all_strikes:
+                    s_val = float(s_str)
+                    c_item = call_items.get(s_str)
+                    p_item = put_items.get(s_str)
+
+                    call_c = None
+                    if c_item:
+                        q = c_item.get("quote", {})
+                        oi = c_item.get("oi", {})
+                        ltp = float(q.get("ltp", 0.0))
+                        pc = float(q.get("pc", 0.0)) if q.get("pc") else None
+                        call_c = OptionContract(
+                            symbol=c_item["inst"].get("symbol", ""),
+                            token=c_item["inst"].get("neoSymbol", ""),
+                            option_type="CE",
+                            strike_price=s_val,
+                            ltp=ltp,
+                            prev_close=pc,
+                            change=ltp - (pc or 0.0),
+                            volume=int(float(q.get("vol", 0))),
+                            open_interest=float(oi.get("cur", 0)),
+                            change_oi=float(oi.get("chg", 0.0))
+                        )
+
+                    put_c = None
+                    if p_item:
+                        q = p_item.get("quote", {})
+                        oi = p_item.get("oi", {})
+                        ltp = float(q.get("ltp", 0.0))
+                        pc = float(q.get("pc", 0.0)) if q.get("pc") else None
+                        put_c = OptionContract(
+                            symbol=p_item["inst"].get("symbol", ""),
+                            token=p_item["inst"].get("neoSymbol", ""),
+                            option_type="PE",
+                            strike_price=s_val,
+                            ltp=ltp,
+                            prev_close=pc,
+                            change=ltp - (pc or 0.0),
+                            volume=int(float(q.get("vol", 0))),
+                            open_interest=float(oi.get("cur", 0)),
+                            change_oi=float(oi.get("chg", 0.0))
+                        )
+
+                    strikes.append(OptionStrike(strike_price=s_val, call=call_c, put=put_c))
+
+                # Fetch available expiries for tab/dropdown selector
+                expiries = await self.get_expiries(und)
+                if not expiries and exp_date:
+                    expiries = [exp_date]
+
+                return OptionChain(
+                    underlying=und,
+                    underlying_ltp=und_ltp,
+                    expiry=exp_date,
+                    expiries=expiries,
+                    lot_size=lot_size,
+                    strikes=strikes
                 )
-            )
-
-            data = resp.get("data", {}) if isinstance(resp, dict) else {}
-            common = data.get("common_data", {})
-            lot_size = int(common.get("mktLot", 50))
-            exp_date = common.get("expiryDt", expiry or "")
-
-            call_items = {item["instrument"]["strikePrice"]: item for item in data.get("call", [])}
-            put_items = {item["instrument"]["strikePrice"]: item for item in data.get("put", [])}
-
-            all_strikes = sorted(set(call_items.keys()) | set(put_items.keys()), key=lambda x: float(x))
-            strikes: List[OptionStrike] = []
-
-            for s_str in all_strikes:
-                s_val = float(s_str)
-                call_data = call_items.get(s_str)
-                put_data = put_items.get(s_str)
-
-                call_contract = None
-                if call_data:
-                    q = call_data.get("quote", {})
-                    oi = call_data.get("openInterest", {})
-                    call_contract = OptionContract(
-                        symbol=call_data.get("instrument", {}).get("symbol", ""),
-                        token=call_data.get("instrument", {}).get("neoSymbol", ""),
-                        option_type="CE",
-                        strike_price=s_val,
-                        ltp=float(q.get("ltp", 0.0)),
-                        prev_close=float(q.get("prevClose", 0.0)) if q.get("prevClose") else None,
-                        change=float(q.get("ltp", 0.0)) - (float(q.get("prevClose", 0.0)) if q.get("prevClose") else 0.0),
-                        volume=q.get("volume"),
-                        open_interest=oi.get("current"),
-                        change_oi=oi.get("change")
-                    )
-
-                put_contract = None
-                if put_data:
-                    q = put_data.get("quote", {})
-                    oi = put_data.get("openInterest", {})
-                    put_contract = OptionContract(
-                        symbol=put_data.get("instrument", {}).get("symbol", ""),
-                        token=put_data.get("instrument", {}).get("neoSymbol", ""),
-                        option_type="PE",
-                        strike_price=s_val,
-                        ltp=float(q.get("ltp", 0.0)),
-                        prev_close=float(q.get("prevClose", 0.0)) if q.get("prevClose") else None,
-                        change=float(q.get("ltp", 0.0)) - (float(q.get("prevClose", 0.0)) if q.get("prevClose") else 0.0),
-                        volume=q.get("volume"),
-                        open_interest=oi.get("current"),
-                        change_oi=oi.get("change")
-                    )
-
-                strikes.append(OptionStrike(strike_price=s_val, call=call_contract, put=put_contract))
-
-            # Underlying LTP from quote
-            und_ltp = 0.0
-            if strikes:
-                mid_strike = strikes[len(strikes) // 2].strike_price
-                und_ltp = mid_strike
-
-            return OptionChain(
-                underlying=underlying.upper(),
-                underlying_ltp=und_ltp,
-                expiry=exp_date,
-                lot_size=lot_size,
-                strikes=strikes
-            )
         except Exception as e:
             logger.error("Error fetching Kotak option chain: %s", e)
-            return OptionChain(underlying=underlying, underlying_ltp=0.0, expiry=expiry or "")
+            return OptionChain(underlying=und, underlying_ltp=0.0, expiry=expiry or "")
 
     async def get_positions(self) -> List[Position]:
         if not self._connected or not self._client:
@@ -517,17 +587,46 @@ class KotakNeoAdapter(BrokerAdapter):
             if callback not in self._subscribers[s_clean]:
                 self._subscribers[s_clean].append(callback)
 
-        if not self._connected or not self._client or not KOTAK_SDK_AVAILABLE:
-            return
+        consumer_key = self._credentials.get("consumer_key") or settings.KOTAK_CONSUMER_KEY
 
-        # Launch SFeed WebSocket consumer if not already running
-        if not self._ws_task or self._ws_task.done():
-            self._ws_task = asyncio.create_task(self._run_sfeed_websocket())
+        # If authenticated with live session and SDK available, launch modern SFeed WebSocket
+        if self._connected and self._client and KOTAK_SDK_AVAILABLE:
+            if not self._ws_task or self._ws_task.done():
+                self._ws_task = asyncio.create_task(self._run_sfeed_websocket())
+        elif consumer_key:
+            # Continuously stream real quotes from Kotak Neo REST API
+            if not self._poll_task or self._poll_task.done():
+                self._poll_task = asyncio.create_task(self._poll_market_quotes())
 
     async def unsubscribe_market_data(self, symbols: List[str]) -> None:
         for sym in symbols:
             s_clean = sym.strip().upper()
             self._subscribers.pop(s_clean, None)
+
+    async def _poll_market_quotes(self):
+        """Continuously stream real quotes from Kotak Neo REST API to subscribers."""
+        logger.info("Starting background real Kotak Neo quotes stream...")
+        while True:
+            try:
+                symbols = list(self._subscribers.keys())
+                if symbols:
+                    quotes = await self.get_quotes(symbols)
+                    for quote in quotes:
+                        cbs = self._subscribers.get(quote.symbol.upper(), [])
+                        for cb in cbs:
+                            try:
+                                if asyncio.iscoroutinefunction(cb):
+                                    await cb(quote)
+                                else:
+                                    cb(quote)
+                            except Exception as cb_err:
+                                logger.debug("Subscriber callback error: %s", cb_err)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.debug("Kotak quotes poll error: %s", e)
+
+            await asyncio.sleep(2.5)
 
     async def _run_sfeed_websocket(self):
         """
@@ -590,6 +689,9 @@ class KotakNeoAdapter(BrokerAdapter):
         if self._ws_task and not self._ws_task.done():
             self._ws_task.cancel()
             self._ws_task = None
+        if self._poll_task and not self._poll_task.done():
+            self._poll_task.cancel()
+            self._poll_task = None
         self._client = None
         self._subscribers.clear()
         logger.info("Kotak Neo adapter disconnected successfully.")

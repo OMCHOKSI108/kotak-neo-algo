@@ -78,8 +78,8 @@ def test_broker_session_zero_leakage():
 
 
 @pytest.mark.asyncio
-async def test_connect_mock_broker_endpoint(client: AsyncClient, user_token: str):
-    # Connect Mock Broker via /api/brokers/connect
+async def test_connect_mock_broker_rejected(client: AsyncClient, user_token: str):
+    # Connect Mock Broker via /api/brokers/connect must be rejected
     resp = await client.post(
         "/api/brokers/connect",
         json={"broker": "MOCK_BROKER", "account_name": "Test Simulation"},
@@ -87,27 +87,10 @@ async def test_connect_mock_broker_endpoint(client: AsyncClient, user_token: str
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["success"] is True
+    assert data["success"] is False
     assert data["broker"] == "MOCK_BROKER"
-    assert data["status"] == "CONNECTED"
-    assert "account_id" in data
-    account_id = data["account_id"]
-
-    # Verify accounts list
-    list_resp = await client.get("/api/brokers/accounts", headers={"Authorization": f"Bearer {user_token}"})
-    assert list_resp.status_code == 200
-    accounts = list_resp.json()
-    assert any(a["id"] == account_id for a in accounts)
-
-    # Disconnect
-    disc_resp = await client.post(f"/api/brokers/{account_id}/disconnect", headers={"Authorization": f"Bearer {user_token}"})
-    assert disc_resp.status_code == 200
-    assert disc_resp.json()["status"] == "DISCONNECTED"
-
-    # Reconnect
-    reconn_resp = await client.post(f"/api/brokers/{account_id}/reconnect", headers={"Authorization": f"Bearer {user_token}"})
-    assert reconn_resp.status_code == 200
-    assert reconn_resp.json()["status"] == "CONNECTED"
+    assert data["status"] == "FAILED"
+    assert "Mock paper broker has been removed" in data["message"]
 
 
 @pytest.mark.asyncio

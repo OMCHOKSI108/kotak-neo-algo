@@ -130,17 +130,6 @@ async def create_user(
     db.add(new_user)
     await db.flush()
 
-    # Pre-assign a mock broker account so user can test immediately
-    default_mock_acc = BrokerAccount(
-        user_id=new_user.id,
-        broker="MOCK_BROKER",
-        account_name="Simulated Paper Broker",
-        status="CONNECTED",
-        masked_identifier="MOCK-PAPER-" + str(new_user.id).zfill(3),
-        session_metadata={"status": "connected", "type": "simulator"}
-    )
-    db.add(default_mock_acc)
-
     # Audit log
     audit = AuditLog(
         user_id=admin.id,
@@ -157,18 +146,7 @@ async def create_user(
         role=new_user.role,
         is_active=new_user.is_active,
         created_at=new_user.created_at,
-        broker_accounts=[
-            BrokerAccountSummary(
-                id=default_mock_acc.id,
-                broker=default_mock_acc.broker,
-                broker_name=default_mock_acc.broker_name,
-                account_name=default_mock_acc.account_name,
-                status=default_mock_acc.status,
-                is_connected=default_mock_acc.is_connected,
-                last_heartbeat_at=default_mock_acc.last_heartbeat_at,
-                masked_identifier=default_mock_acc.masked_identifier
-            )
-        ]
+        broker_accounts=[]
     )
 
 

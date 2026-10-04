@@ -28,13 +28,13 @@ def get_broker_adapter(
     if normalized in ("KOTAK_NEO", "KOTAK", "KOTAKNEO"):
         adapter = KotakNeoAdapter(credentials=credentials)
     elif normalized in ("MOCK_BROKER", "MOCK", "PAPER"):
-        adapter = MockBrokerAdapter()
+        raise ValueError("Mock broker has been disabled. Only real brokers (Kotak Neo) are supported.")
     elif normalized in ("UPSTOX", "FYERS", "DHAN", "ZERODHA"):
         # Architecture is ready for future brokers
-        raise NotImplementedError(f"Broker '{broker_name}' adapter is coming soon. Currently supported: KOTAK_NEO, MOCK_BROKER.")
+        raise NotImplementedError(f"Broker '{broker_name}' adapter is coming soon. Currently supported: KOTAK_NEO.")
     else:
-        logger.warning("Unknown broker '%s', defaulting to MockBrokerAdapter for safety.", broker_name)
-        adapter = MockBrokerAdapter()
+        logger.info("Initializing KotakNeoAdapter for '%s'.", broker_name)
+        adapter = KotakNeoAdapter(credentials=credentials)
 
     _adapters[cache_key] = adapter
     return adapter

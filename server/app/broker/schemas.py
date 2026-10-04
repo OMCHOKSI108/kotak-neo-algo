@@ -31,8 +31,8 @@ class OptionContract(BaseModel):
     prev_close: Optional[float] = None
     change: Optional[float] = None
     volume: Optional[int] = None
-    open_interest: Optional[int] = None
-    change_oi: Optional[int] = None
+    open_interest: Optional[float] = None
+    change_oi: Optional[float] = None
     bid: Optional[float] = None
     ask: Optional[float] = None
     iv: Optional[float] = None
