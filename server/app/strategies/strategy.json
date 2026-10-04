@@ -1,0 +1,56 @@
+{
+  "active_strategy": "sma_crossover",
+  "strategies": [
+    {
+      "id": "sma_crossover",
+      "name": "SMA Fast/Slow Crossover",
+      "description": "Trend-following strategy that enters long when 9-period SMA crosses above 21-period SMA and exits on inverse cross.",
+      "default_symbol": "NIFTY",
+      "default_timeframe": "1d",
+      "capital": 500000.0,
+      "slippage_pct": 0.0005,
+      "brokerage_per_order": 20.0,
+      "segment": "equity_intraday",
+      "parameters": {
+        "fast_period": 9,
+        "slow_period": 21,
+        "stop_loss_pct": 0.02,
+        "take_profit_pct": 0.04
+      }
+    },
+    {
+      "id": "rsi_mean_reversion",
+      "name": "RSI Mean Reversion",
+      "description": "Counter-trend momentum strategy buying oversold dips below 30 and selling overbought spikes above 70.",
+      "default_symbol": "RELIANCE",
+      "default_timeframe": "1d",
+      "capital": 500000.0,
+      "slippage_pct": 0.0005,
+      "brokerage_per_order": 20.0,
+      "segment": "equity_intraday",
+      "parameters": {
+        "period": 14,
+        "oversold": 30,
+        "overbought": 70,
+        "stop_loss_pct": 0.02,
+        "take_profit_pct": 0.03
+      }
+    },
+    {
+      "id": "channel_breakout",
+      "name": "Donchian Channel Breakout",
+      "description": "Breakout strategy buying new 20-period highs and exiting on 20-period lows.",
+      "default_symbol": "BANKNIFTY",
+      "default_timeframe": "1d",
+      "capital": 500000.0,
+      "slippage_pct": 0.0005,
+      "brokerage_per_order": 20.0,
+      "segment": "equity_intraday",
+      "parameters": {
+        "lookback_period": 20,
+        "stop_loss_pct": 0.015,
+        "take_profit_pct": 0.04
+      }
+    }
+  ]
+}

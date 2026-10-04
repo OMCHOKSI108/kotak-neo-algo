@@ -1,0 +1,52 @@
+# Environments & Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.cert
+secrets/
+
+# Python & Virtual Environments
+.venv/
+server/.venv/
+venv/
+server/venv/
+ENV/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Node & React
+node_modules/
+client/node_modules/
+client/dist/
+client/build/
+.npm
+.eslintcache
+
+# Database & Local Artifacts
+*.sqlite
+*.sqlite3
+*.db
+*.log
+local_data/
+server/data/uploads/
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# OS Artifacts
+Thumbs.db
