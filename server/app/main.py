@@ -68,6 +68,139 @@ async def root_market_websocket(websocket: WebSocket):
         await market_service.unregister_client(websocket)
 
 
+@app.get("/")
+async def root():
+    """Showcase platform information and directory of available API endpoints."""
+    return {
+        "app_name": settings.APP_NAME,
+        "version": "1.0.0",
+        "status": "online",
+        "environment": settings.APP_ENV,
+        "trading_enabled": settings.TRADING_ENABLED,
+        "documentation": {
+            "swagger_ui": "/docs",
+            "redoc": "/redoc",
+            "openapi_json": "/openapi.json",
+        },
+        "endpoints": {
+            "health": [
+                {
+                    "method": "GET",
+                    "path": "/health",
+                    "description": "System health check and broker connectivity status",
+                }
+            ],
+            "authentication": [
+                {
+                    "method": "POST",
+                    "path": "/api/v1/auth/login",
+                    "description": "Authenticate user/admin with email and password",
+                },
+                {
+                    "method": "GET",
+                    "path": "/api/v1/auth/me",
+                    "description": "Get current authenticated user profile",
+                },
+            ],
+            "admin": [
+                {
+                    "method": "GET",
+                    "path": "/api/v1/admin/users",
+                    "description": "List all registered platform users",
+                },
+                {
+                    "method": "POST",
+                    "path": "/api/v1/admin/users",
+                    "description": "Create a new platform user account",
+                },
+                {
+                    "method": "PATCH",
+                    "path": "/api/v1/admin/users/{user_id}/status",
+                    "description": "Enable or disable a user account",
+                },
+                {
+                    "method": "GET",
+                    "path": "/api/v1/admin/broker-accounts",
+                    "description": "Audit all connected broker accounts with masked identifiers",
+                },
+            ],
+            "broker_management": [
+                {
+                    "method": "GET",
+                    "path": "/api/v1/broker/accounts",
+                    "description": "List connected broker accounts for current user",
+                },
+                {
+                    "method": "POST",
+                    "path": "/api/v1/broker/connect",
+                    "description": "Secure 2-step TOTP/MPIN broker connection with AES-256-GCM encryption",
+                },
+                {
+                    "method": "POST",
+                    "path": "/api/v1/broker/disconnect",
+                    "description": "Disconnect active broker session",
+                },
+                {
+                    "method": "GET",
+                    "path": "/api/v1/broker/profile",
+                    "description": "Fetch real broker margin balance and profile",
+                },
+                {
+                    "method": "GET",
+                    "path": "/api/v1/broker/positions",
+                    "description": "Fetch live open positions",
+                },
+                {
+                    "method": "GET",
+                    "path": "/api/v1/broker/orders",
+                    "description": "Fetch live order book history",
+                },
+            ],
+            "market_data": [
+                {
+                    "method": "GET",
+                    "path": "/api/v1/market/overview",
+                    "description": "Overview of major Indian indices (NIFTY 50, BANKNIFTY, SENSEX)",
+                },
+                {
+                    "method": "GET",
+                    "path": "/api/v1/market/quotes",
+                    "description": "Real-time quotes for tracked symbols",
+                },
+                {
+                    "method": "GET",
+                    "path": "/api/v1/market/option-chain",
+                    "description": "Normalized option chain data by strike and expiry",
+                },
+                {
+                    "method": "GET",
+                    "path": "/api/v1/market/historical",
+                    "description": "Historical OHLCV candlestick data",
+                },
+            ],
+            "quantitative_backtesting": [
+                {
+                    "method": "GET",
+                    "path": "/api/v1/backtest/strategies",
+                    "description": "List available quantitative strategies and indicator parameters",
+                },
+                {
+                    "method": "POST",
+                    "path": "/api/v1/backtest/run",
+                    "description": "Execute backtest with configurable lot sizes and statutory friction",
+                },
+            ],
+            "websocket": [
+                {
+                    "protocol": "WebSocket",
+                    "path": "/ws/market",
+                    "description": "Real-time live market ticks streaming normalized to React",
+                }
+            ],
+        },
+    }
+
+
 @app.get("/health")
 @app.get("/api/health")
 async def health_check():
@@ -77,5 +210,6 @@ async def health_check():
         "app_name": settings.APP_NAME,
         "trading_enabled": settings.TRADING_ENABLED,
         "active_broker": market_service.adapter.broker_name,
-        "is_connected": market_service.adapter.is_connected
+        "is_connected": market_service.adapter.is_connected,
     }
+
