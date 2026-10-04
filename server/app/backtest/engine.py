@@ -24,6 +24,9 @@ class BacktestEngine:
         symbol: str = "NIFTY",
         timeframe: str = "1d",
         initial_capital: float = 500000.0,
+        lot_size: int = 1,
+        num_lots: int = 1,
+        sizing_mode: str = "lots",
         slippage_pct: float = 0.0005,
         brokerage_per_order: float = 20.0,
         segment: str = "equity_intraday",
@@ -35,6 +38,11 @@ class BacktestEngine:
             raise ValueError(f"Strategy '{strategy_id}' not found in registry.")
 
         config = load_strategy_config(strategy_id)
+        # Inherit defaults from config if not explicitly provided
+        if lot_size <= 1 and config.get("default_lot_size"):
+            lot_size = config["default_lot_size"]
+        if num_lots <= 1 and config.get("default_num_lots"):
+            num_lots = config["default_num_lots"]
         merged_params = strat_obj.default_parameters.copy()
         if "parameters" in config and isinstance(config["parameters"], dict):
             merged_params.update(config["parameters"])
@@ -128,9 +136,31 @@ class BacktestEngine:
             # --- Check Entry for Flat Position ---
             if position_qty == 0 and signal == 1:
                 exec_entry_price = calculate_slippage(close_p, "BUY", slippage_pct)
-                # Position sizing: Allocate 95% of available cash
-                alloc_cash = cash * 0.95
-                qty = math.floor(alloc_cash / exec_entry_price)
+                clean_lot_size = max(1, int(lot_size))
+                clean_num_lots = max(1, int(num_lots))
+
+                if sizing_mode == "lots":
+                    # Trade exact number of lots (e.g. 2 lots * 25 lot_size = 50 qty)
+                    desired_qty = clean_num_lots * clean_lot_size
+                    entry_turnover = exec_entry_price * desired_qty
+                    entry_costs = calculate_indian_transaction_charges(
+                        turnover=entry_turnover,
+                        side="BUY",
+                        segment=segment,
+                        custom_brokerage_per_order=brokerage_per_order
+                    )
+                    # If cash is insufficient, downsize to maximum affordable lots
+                    if cash < (entry_turnover + entry_costs["total_charges"]):
+                        affordable_lots = math.floor(cash / (exec_entry_price * clean_lot_size))
+                        desired_qty = affordable_lots * clean_lot_size
+
+                    qty = desired_qty
+                else:
+                    # Allocate based on available cash rounded to nearest lot size
+                    alloc_cash = cash * 0.95
+                    raw_qty = math.floor(alloc_cash / exec_entry_price)
+                    qty = (raw_qty // clean_lot_size) * clean_lot_size if clean_lot_size > 1 else raw_qty
+
                 if qty > 0:
                     entry_turnover = exec_entry_price * qty
                     entry_costs = calculate_indian_transaction_charges(

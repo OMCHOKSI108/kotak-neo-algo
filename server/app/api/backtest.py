@@ -20,6 +20,9 @@ class RunBacktestRequest(BaseModel):
     symbol: str = "NIFTY"
     timeframe: str = "1d"
     initial_capital: float = 500000.0
+    lot_size: int = 1
+    num_lots: int = 1
+    sizing_mode: str = "lots"  # "lots" or "capital"
     slippage_pct: float = 0.0005
     brokerage_per_order: float = 20.0
     segment: str = "equity_intraday"
@@ -66,6 +69,9 @@ async def run_backtest(
             symbol=req.symbol,
             timeframe=req.timeframe,
             initial_capital=req.initial_capital,
+            lot_size=req.lot_size,
+            num_lots=req.num_lots,
+            sizing_mode=req.sizing_mode,
             slippage_pct=req.slippage_pct,
             brokerage_per_order=req.brokerage_per_order,
             segment=req.segment,

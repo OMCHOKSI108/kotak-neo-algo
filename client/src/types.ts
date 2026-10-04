@@ -106,6 +106,9 @@ export interface StrategyDefinition {
   description: string;
   default_symbol?: string;
   default_timeframe?: string;
+  default_lot_size?: number;
+  default_num_lots?: number;
+  default_capital?: number;
   capital?: number;
   slippage_pct?: number;
   brokerage_per_order?: number;
