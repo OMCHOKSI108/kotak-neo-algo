@@ -30,24 +30,33 @@ class BrokerAccount(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    broker_name = Column(String(50), nullable=False)  # e.g., "mock_broker", "kotak_neo"
+    broker = Column(String(50), nullable=False, default="KOTAK_NEO")  # e.g., "KOTAK_NEO", "MOCK_BROKER"
+    broker_name = Column(String(50), nullable=True, default="KOTAK_NEO")
     account_name = Column(String(100), default="Default Account", nullable=False)
-    is_active = Column(Boolean, default=True, nullable=False)
-    is_connected = Column(Boolean, default=False, nullable=False)
+    status = Column(String(20), default="DISCONNECTED", nullable=False)  # "CONNECTED", "DISCONNECTED", "FAILED"
+    is_active = Column(Boolean, default=True, nullable=True)
+    last_authenticated_at = Column(DateTime(timezone=True), nullable=True)
     last_heartbeat_at = Column(DateTime(timezone=True), nullable=True)
 
-    # Sensitive credentials ENCRYPTED AT REST with Fernet
+    # Sensitive credentials & session tokens ENCRYPTED AT REST with authenticated AES-256-GCM
     encrypted_consumer_key = Column(Text, nullable=True)
-    encrypted_consumer_secret = Column(Text, nullable=True)
     encrypted_mobile_number = Column(Text, nullable=True)
-    encrypted_mpin = Column(Text, nullable=True)
     encrypted_ucc = Column(Text, nullable=True)
+    encrypted_mpin = Column(Text, nullable=True)
     encrypted_totp_secret = Column(Text, nullable=True)
+    encrypted_view_token = Column(Text, nullable=True)
+    encrypted_view_sid = Column(Text, nullable=True)
+    encrypted_trading_token = Column(Text, nullable=True)
+    encrypted_trading_sid = Column(Text, nullable=True)
+    encrypted_base_url = Column(Text, nullable=True)
 
-    # Safe display identifier (masked) e.g., "UCC: ••••45" or "Mock Broker"
+    # Legacy field support
+    encrypted_consumer_secret = Column(Text, nullable=True)
+
+    # Safe display identifier (masked) e.g., "UCC: *****123"
     masked_identifier = Column(String(100), default="", nullable=False)
 
-    # Non-sensitive dynamic session metadata (e.g. baseUrl, sid expiry timestamp)
+    # Non-sensitive dynamic session metadata
     session_metadata = Column(JSON, default=dict, nullable=False)
 
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
@@ -55,12 +64,28 @@ class BrokerAccount(Base):
 
     user = relationship("User", back_populates="broker_accounts")
 
+    def __init__(self, **kwargs):
+        if "broker_name" in kwargs and "broker" not in kwargs:
+            kwargs["broker"] = kwargs["broker_name"]
+        elif "broker" in kwargs and "broker_name" not in kwargs:
+            kwargs["broker_name"] = kwargs["broker"]
+        super().__init__(**kwargs)
+
+    @property
+    def is_connected(self) -> bool:
+        return self.status == "CONNECTED"
+
+    @is_connected.setter
+    def is_connected(self, val: bool):
+        self.status = "CONNECTED" if val else "DISCONNECTED"
+
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    broker_account_id = Column(Integer, ForeignKey("broker_accounts.id", ondelete="SET NULL"), nullable=True, index=True)
     action = Column(String(100), nullable=False, index=True)
     details = Column(JSON, default=dict, nullable=False)
     ip_address = Column(String(50), nullable=True)

@@ -86,3 +86,8 @@ class BrokerAdapter(ABC):
     async def unsubscribe_market_data(self, symbols: List[str]) -> None:
         """Unsubscribe from live ticks."""
         pass
+
+    async def disconnect(self) -> None:
+        """Disconnect active session and release resources."""
+        pass
+

@@ -1,3 +1,4 @@
+import logging
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -7,58 +8,93 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.models.models import User, BrokerAccount, AuditLog
-from app.core.security import encrypt_credential, decrypt_credential, mask_secret
+from app.security.encryption import encrypt_secret, decrypt_secret, mask_identifier
 from app.core.config import settings
-from app.api.deps import get_current_user
-from app.broker.factory import get_broker_adapter
+from app.api.deps import get_current_user, require_admin
+from app.broker.factory import get_broker_adapter, remove_broker_adapter
 from app.broker.schemas import (
     Position, Order, OrderRequest, OrderResult, BrokerProfile
 )
+from app.broker import kotak_neo
 from app.market.service import market_service
 
-router = APIRouter(prefix="/broker", tags=["Broker Integration"])
+logger = logging.getLogger(__name__)
 
+router = APIRouter(tags=["Broker Integration"])
+
+
+# ------------------------------------------------------------------------------
+# Request & Response Schemas
+# ------------------------------------------------------------------------------
 
 class ConnectBrokerRequest(BaseModel):
-    broker_name: str = Field(..., description="mock_broker or kotak_neo")
-    account_name: str = "Trading Account"
-    # Kotak Neo specific fields (optional if mock_broker)
+    broker: str = Field(..., description="KOTAK_NEO or MOCK_BROKER")
+    account_name: Optional[str] = "Trading Account"
+    # Kotak Neo specific credentials
     consumer_key: Optional[str] = None
-    consumer_secret: Optional[str] = None
     mobile_number: Optional[str] = None
     ucc: Optional[str] = None
     mpin: Optional[str] = None
+    totp: Optional[str] = None
     totp_secret: Optional[str] = None
     environment: str = "prod"
+
+    # Compatibility alias for broker_name
+    broker_name: Optional[str] = None
+
+
+class ReconnectBrokerRequest(BaseModel):
+    totp: Optional[str] = Field(None, description="Current 6-digit TOTP code for 2FA re-verification")
+
+
+class SanitizedBrokerConnectResponse(BaseModel):
+    success: bool
+    broker: str
+    status: str
+    account: Optional[str] = None
+    account_id: Optional[int] = None
+    connected_at: Optional[str] = None
+    last_verified_at: Optional[str] = None
+    message: Optional[str] = None
 
 
 class BrokerAccountResponse(BaseModel):
     id: int
+    broker: str
     broker_name: str
     account_name: str
+    status: str
     is_connected: bool
+    last_authenticated_at: Optional[datetime] = None
     last_heartbeat_at: Optional[datetime] = None
     masked_identifier: str
     session_metadata: Dict[str, Any] = {}
-    # Credentials are encrypted in DB and NEVER returned in plain text here!
 
 
-@router.get("/accounts", response_model=List[BrokerAccountResponse])
+# ------------------------------------------------------------------------------
+# Routes
+# ------------------------------------------------------------------------------
+
+@router.get("/brokers/accounts", response_model=List[BrokerAccountResponse])
+@router.get("/broker/accounts", response_model=List[BrokerAccountResponse])
 async def get_accounts(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
-    """Retrieve all broker accounts belonging to the current user (credentials masked)."""
-    stmt = select(BrokerAccount).where(BrokerAccount.user_id == user.id)
+    """Retrieve all broker accounts belonging to the current user (all secrets masked)."""
+    stmt = select(BrokerAccount).where(BrokerAccount.user_id == user.id).order_by(BrokerAccount.id.asc())
     result = await db.execute(stmt)
     accounts = result.scalars().all()
 
     return [
         BrokerAccountResponse(
             id=acc.id,
+            broker=acc.broker,
             broker_name=acc.broker_name,
             account_name=acc.account_name,
+            status=acc.status,
             is_connected=acc.is_connected,
+            last_authenticated_at=acc.last_authenticated_at,
             last_heartbeat_at=acc.last_heartbeat_at,
             masked_identifier=acc.masked_identifier or "N/A",
             session_metadata=acc.session_metadata or {}
@@ -67,197 +103,530 @@ async def get_accounts(
     ]
 
 
-@router.post("/connect", response_model=BrokerAccountResponse)
+@router.post("/brokers/connect", response_model=SanitizedBrokerConnectResponse)
+@router.post("/broker/connect", response_model=SanitizedBrokerConnectResponse)
 async def connect_broker(
     req: ConnectBrokerRequest,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """
-    Connect a broker account (Mock Broker or Kotak Neo).
-    Encrypts credentials at rest in PostgreSQL using application Fernet encryption key.
+    Connect a broker account (Kotak Neo or Mock Broker).
+    
+    Security & Architecture Flow:
+    1. React sends credentials over HTTPS to FastAPI (React NEVER calls Kotak directly).
+    2. FastAPI validates input format.
+    3. Backend performs 2-step Kotak Neo TOTP auth (tradeApiLogin -> tradeApiValidate).
+    4. Kotak returns temporary View Tokens, Trading Tokens, SIDs, and Base URL.
+    5. Backend stores credentials and session info encrypted at rest in PostgreSQL
+       using authenticated AES-256-GCM.
+    6. Raw secrets and tokens are NEVER logged, returned in API response, or exposed.
+    7. React receives strictly sanitized status info.
     """
-    b_name = req.broker_name.lower().strip()
-    if b_name not in ["mock_broker", "kotak_neo"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported broker: '{req.broker_name}'. Currently supported: mock_broker, kotak_neo."
-        )
+    broker_type = (req.broker or req.broker_name or "").strip().upper()
 
-    # Build masked identifier for safe UI display
-    if b_name == "mock_broker":
-        masked_id = "MOCK-PAPER-" + str(user.id).zfill(3)
-        creds = {"environment": "simulation"}
-    else:
-        # Kotak Neo: validate and encrypt
-        if not (req.consumer_key and req.mobile_number and req.ucc and req.mpin):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Kotak Neo requires consumer_key, mobile_number, ucc, and mpin."
-            )
-        masked_id = f"UCC: {mask_secret(req.ucc, 2)} | Mobile: {mask_secret(req.mobile_number, 3)}"
+    if broker_type in ("KOTAK_NEO", "KOTAK", "KOTAKNEO"):
+        # Validate Kotak Neo credentials
         creds = {
             "consumer_key": req.consumer_key,
-            "consumer_secret": req.consumer_secret,
             "mobile_number": req.mobile_number,
             "ucc": req.ucc,
             "mpin": req.mpin,
-            "totp_secret": req.totp_secret,
+            "totp": req.totp,
             "environment": req.environment,
         }
 
-    # Instantiate adapter and authenticate
-    adapter = get_broker_adapter(b_name, credentials=creds)
-    auth_result = await adapter.authenticate(creds)
+        try:
+            kotak_neo.validate_kotak_credentials(creds)
+        except ValueError as val_err:
+            return SanitizedBrokerConnectResponse(
+                success=False,
+                broker="KOTAK_NEO",
+                status="FAILED",
+                message=str(val_err)
+            )
 
-    if not auth_result.is_authenticated:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Broker authentication failed: {auth_result.message}"
+        # Record audit log for attempt (without sensitive data)
+        audit_attempt = AuditLog(
+            user_id=user.id,
+            action="BROKER_CONNECT_ATTEMPT",
+            details={
+                "broker": "KOTAK_NEO",
+                "ucc_masked": mask_identifier(req.ucc),
+                "environment": req.environment,
+            }
+        )
+        db.add(audit_attempt)
+        await db.commit()
+
+        # Step 1 & 2: Authenticate via official Kotak Neo flow
+        session = await kotak_neo.login(creds)
+
+        if session.status != "CONNECTED":
+            # Record audit log for failure
+            audit_fail = AuditLog(
+                user_id=user.id,
+                action="BROKER_CONNECT_FAILED",
+                details={
+                    "broker": "KOTAK_NEO",
+                    "ucc_masked": mask_identifier(req.ucc),
+                    "reason": session.message,
+                }
+            )
+            db.add(audit_fail)
+            await db.commit()
+
+            return SanitizedBrokerConnectResponse(
+                success=False,
+                broker="KOTAK_NEO",
+                status="FAILED",
+                message=session.message or "Kotak Neo authentication failed. Check your credentials or TOTP and try again."
+            )
+
+        # Authentication Succeeded!
+        now = datetime.now(timezone.utc)
+        masked_ucc = mask_identifier(req.ucc)
+
+        # Find existing account or create new
+        stmt = select(BrokerAccount).where(
+            BrokerAccount.user_id == user.id,
+            BrokerAccount.broker.in_(["KOTAK_NEO", "kotak_neo"])
+        )
+        result = await db.execute(stmt)
+        account = result.scalar_one_or_none()
+
+        # Encrypt all sensitive credentials & session tokens at rest
+        enc_consumer_key = encrypt_secret(req.consumer_key)
+        enc_mobile = encrypt_secret(req.mobile_number)
+        enc_ucc = encrypt_secret(req.ucc)
+        enc_mpin = encrypt_secret(req.mpin)
+        enc_totp_secret = encrypt_secret(req.totp_secret) if req.totp_secret else None
+        enc_view_token = encrypt_secret(session.view_token)
+        enc_view_sid = encrypt_secret(session.view_sid)
+        enc_trading_token = encrypt_secret(session.trading_token)
+        enc_trading_sid = encrypt_secret(session.trading_sid)
+        enc_base_url = encrypt_secret(session.base_url)
+
+        if not account:
+            account = BrokerAccount(
+                user_id=user.id,
+                broker="KOTAK_NEO",
+                account_name=req.account_name or f"Kotak Neo ({masked_ucc})",
+                status="CONNECTED",
+                last_authenticated_at=now,
+                last_heartbeat_at=now,
+                masked_identifier=masked_ucc,
+                encrypted_consumer_key=enc_consumer_key,
+                encrypted_mobile_number=enc_mobile,
+                encrypted_ucc=enc_ucc,
+                encrypted_mpin=enc_mpin,
+                encrypted_totp_secret=enc_totp_secret,
+                encrypted_view_token=enc_view_token,
+                encrypted_view_sid=enc_view_sid,
+                encrypted_trading_token=enc_trading_token,
+                encrypted_trading_sid=enc_trading_sid,
+                encrypted_base_url=enc_base_url,
+                session_metadata={
+                    "data_center": session.data_center,
+                    "feed_url": session.feed_url,
+                    "environment": req.environment,
+                }
+            )
+            db.add(account)
+        else:
+            account.status = "CONNECTED"
+            account.account_name = req.account_name or account.account_name
+            account.last_authenticated_at = now
+            account.last_heartbeat_at = now
+            account.masked_identifier = masked_ucc
+            account.encrypted_consumer_key = enc_consumer_key
+            account.encrypted_mobile_number = enc_mobile
+            account.encrypted_ucc = enc_ucc
+            account.encrypted_mpin = enc_mpin
+            if enc_totp_secret:
+                account.encrypted_totp_secret = enc_totp_secret
+            account.encrypted_view_token = enc_view_token
+            account.encrypted_view_sid = enc_view_sid
+            account.encrypted_trading_token = enc_trading_token
+            account.encrypted_trading_sid = enc_trading_sid
+            account.encrypted_base_url = enc_base_url
+            account.session_metadata = {
+                "data_center": session.data_center,
+                "feed_url": session.feed_url,
+                "environment": req.environment,
+            }
+
+        # Initialize Kotak Neo Adapter with active session
+        adapter = get_broker_adapter("kotak_neo", account_id=user.id, credentials=creds)
+        market_service.set_adapter(adapter)
+
+        # Audit log for success
+        audit_success = AuditLog(
+            user_id=user.id,
+            broker_account_id=account.id if hasattr(account, "id") else None,
+            action="BROKER_CONNECT_SUCCESS",
+            details={
+                "broker": "KOTAK_NEO",
+                "ucc_masked": masked_ucc,
+                "status": "CONNECTED",
+            }
+        )
+        db.add(audit_success)
+        await db.commit()
+        await db.refresh(account)
+
+        return SanitizedBrokerConnectResponse(
+            success=True,
+            broker="KOTAK_NEO",
+            status="CONNECTED",
+            account=masked_ucc,
+            account_id=account.id,
+            connected_at=now.isoformat(),
+            last_verified_at=now.isoformat(),
+            message="Kotak Neo connected and authenticated successfully."
         )
 
-    # Check if existing account for this broker exists for this user
+    elif broker_type in ("MOCK_BROKER", "MOCK", "PAPER"):
+        # Mock broker connection for simulation / testing
+        now = datetime.now(timezone.utc)
+        masked_id = f"MOCK-PAPER-{str(user.id).zfill(3)}"
+
+        stmt = select(BrokerAccount).where(
+            BrokerAccount.user_id == user.id,
+            BrokerAccount.broker.in_(["MOCK_BROKER", "mock_broker"])
+        )
+        result = await db.execute(stmt)
+        account = result.scalar_one_or_none()
+
+        if not account:
+            account = BrokerAccount(
+                user_id=user.id,
+                broker="MOCK_BROKER",
+                account_name=req.account_name or "Paper Trading Sandbox",
+                status="CONNECTED",
+                last_authenticated_at=now,
+                last_heartbeat_at=now,
+                masked_identifier=masked_id,
+                session_metadata={"environment": "simulation"}
+            )
+            db.add(account)
+        else:
+            account.status = "CONNECTED"
+            account.last_authenticated_at = now
+            account.last_heartbeat_at = now
+            account.masked_identifier = masked_id
+
+        adapter = get_broker_adapter("mock_broker", account_id=user.id)
+        market_service.set_adapter(adapter)
+
+        audit_mock = AuditLog(
+            user_id=user.id,
+            action="BROKER_CONNECT_SUCCESS",
+            details={"broker": "MOCK_BROKER", "masked_identifier": masked_id}
+        )
+        db.add(audit_mock)
+        await db.commit()
+        await db.refresh(account)
+
+        return SanitizedBrokerConnectResponse(
+            success=True,
+            broker="MOCK_BROKER",
+            status="CONNECTED",
+            account=masked_id,
+            account_id=account.id,
+            connected_at=now.isoformat(),
+            last_verified_at=now.isoformat(),
+            message="Mock paper trading broker connected."
+        )
+
+    elif broker_type in ("UPSTOX", "FYERS", "DHAN", "ZERODHA"):
+        return SanitizedBrokerConnectResponse(
+            success=False,
+            broker=broker_type,
+            status="FAILED",
+            message=f"Broker {broker_type} adapter is coming soon. Currently supported: KOTAK_NEO, MOCK_BROKER."
+        )
+    else:
+        return SanitizedBrokerConnectResponse(
+            success=False,
+            broker=broker_type,
+            status="FAILED",
+            message=f"Unsupported broker: '{broker_type}'."
+        )
+
+
+@router.post("/brokers/{broker_account_id}/disconnect")
+@router.post("/broker/disconnect/{broker_account_id}")
+async def disconnect_broker_account(
+    broker_account_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user)
+):
+    """
+    Disconnect a broker account.
+    - Invalidates stored session credentials (view token, trading token, SIDs).
+    - Marks account status as DISCONNECTED.
+    - Evicts and cleans up broker adapter WebSocket connections.
+    - Logs audit record.
+    """
     stmt = select(BrokerAccount).where(
-        BrokerAccount.user_id == user.id,
-        BrokerAccount.broker_name == b_name
+        BrokerAccount.id == broker_account_id,
+        BrokerAccount.user_id == user.id
     )
     result = await db.execute(stmt)
     account = result.scalar_one_or_none()
 
-    now = datetime.now(timezone.utc)
     if not account:
-        account = BrokerAccount(
-            user_id=user.id,
-            broker_name=b_name,
-            account_name=req.account_name,
-            is_active=True,
-            is_connected=True,
-            last_heartbeat_at=now,
-            masked_identifier=masked_id,
-            session_metadata=auth_result.session_metadata,
-            encrypted_consumer_key=encrypt_credential(req.consumer_key),
-            encrypted_consumer_secret=encrypt_credential(req.consumer_secret),
-            encrypted_mobile_number=encrypt_credential(req.mobile_number),
-            encrypted_ucc=encrypt_credential(req.ucc),
-            encrypted_mpin=encrypt_credential(req.mpin),
-            encrypted_totp_secret=encrypt_credential(req.totp_secret)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Broker account not found."
         )
-        db.add(account)
-    else:
-        account.is_connected = True
-        account.account_name = req.account_name
-        account.last_heartbeat_at = now
-        account.masked_identifier = masked_id
-        account.session_metadata = auth_result.session_metadata
-        if req.consumer_key:
-            account.encrypted_consumer_key = encrypt_credential(req.consumer_key)
-            account.encrypted_consumer_secret = encrypt_credential(req.consumer_secret)
-            account.encrypted_mobile_number = encrypt_credential(req.mobile_number)
-            account.encrypted_ucc = encrypt_credential(req.ucc)
-            account.encrypted_mpin = encrypt_credential(req.mpin)
-            account.encrypted_totp_secret = encrypt_credential(req.totp_secret)
 
-    # Update active market data adapter in MarketDataService
-    market_service.set_adapter(adapter)
+    # Invalidate session credentials
+    account.status = "DISCONNECTED"
+    account.encrypted_view_token = None
+    account.encrypted_view_sid = None
+    account.encrypted_trading_token = None
+    account.encrypted_trading_sid = None
+    account.last_heartbeat_at = datetime.now(timezone.utc)
+
+    # Evict active adapter and close its WebSocket
+    remove_broker_adapter(account.id, account.broker)
 
     # Audit log
     audit = AuditLog(
         user_id=user.id,
-        action="BROKER_CONNECTED",
-        details={"broker_name": b_name, "masked_identifier": masked_id}
+        broker_account_id=account.id,
+        action="BROKER_DISCONNECT",
+        details={
+            "broker": account.broker,
+            "account_id": account.id,
+            "masked_identifier": account.masked_identifier,
+        }
     )
     db.add(audit)
-    await db.commit()
-    await db.refresh(account)
-
-    return BrokerAccountResponse(
-        id=account.id,
-        broker_name=account.broker_name,
-        account_name=account.account_name,
-        is_connected=account.is_connected,
-        last_heartbeat_at=account.last_heartbeat_at,
-        masked_identifier=account.masked_identifier,
-        session_metadata=account.session_metadata
-    )
-
-
-@router.post("/disconnect/{account_id}")
-async def disconnect_broker(
-    account_id: int,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user)
-):
-    """Disconnect a broker account."""
-    stmt = select(BrokerAccount).where(
-        BrokerAccount.id == account_id,
-        BrokerAccount.user_id == user.id
-    )
-    result = await db.execute(stmt)
-    account = result.scalar_one_or_none()
-
-    if not account:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Broker account not found")
-
-    account.is_connected = False
-    audit = AuditLog(
-        user_id=user.id,
-        action="BROKER_DISCONNECTED",
-        details={"broker_name": account.broker_name, "account_id": account_id}
-    )
-    db.add(audit)
-    await db.commit()
-
-    return {"message": f"Broker {account.broker_name} disconnected"}
-
-
-@router.get("/heartbeat/{account_id}")
-async def check_heartbeat(
-    account_id: int,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user)
-):
-    """Heartbeat check for connected broker adapter."""
-    stmt = select(BrokerAccount).where(
-        BrokerAccount.id == account_id,
-        BrokerAccount.user_id == user.id
-    )
-    result = await db.execute(stmt)
-    account = result.scalar_one_or_none()
-
-    if not account:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
-
-    now = datetime.now(timezone.utc)
-    account.last_heartbeat_at = now
     await db.commit()
 
     return {
-        "account_id": account.id,
-        "broker_name": account.broker_name,
-        "is_connected": account.is_connected,
-        "heartbeat_at": now.isoformat()
+        "success": True,
+        "broker": account.broker,
+        "status": "DISCONNECTED",
+        "message": f"Broker account {account.masked_identifier} disconnected successfully."
     }
 
 
-@router.get("/profile", response_model=BrokerProfile)
+@router.post("/brokers/{broker_account_id}/reconnect", response_model=SanitizedBrokerConnectResponse)
+@router.post("/broker/reconnect/{broker_account_id}")
+async def reconnect_broker_account(
+    broker_account_id: int,
+    req: Optional[ReconnectBrokerRequest] = None,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user)
+):
+    """
+    Reconnect an existing broker account using stored credentials and a fresh TOTP code.
+    1. Retrieves encrypted long-lived credentials from PostgreSQL.
+    2. Decrypts them strictly in server memory.
+    3. Re-executes the Kotak Neo 2-step TOTP login flow.
+    4. Updates encrypted session tokens in PostgreSQL.
+    5. Returns sanitized connection result.
+    """
+    stmt = select(BrokerAccount).where(
+        BrokerAccount.id == broker_account_id,
+        BrokerAccount.user_id == user.id
+    )
+    result = await db.execute(stmt)
+    account = result.scalar_one_or_none()
+
+    if not account:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Broker account not found."
+        )
+
+    if account.broker in ("MOCK_BROKER", "mock_broker"):
+        account.status = "CONNECTED"
+        account.last_authenticated_at = datetime.now(timezone.utc)
+        await db.commit()
+        return SanitizedBrokerConnectResponse(
+            success=True,
+            broker=account.broker,
+            status="CONNECTED",
+            account=account.masked_identifier,
+            account_id=account.id,
+            connected_at=account.last_authenticated_at.isoformat(),
+            message="Mock paper broker reconnected."
+        )
+
+    # For Kotak Neo: decrypt long-lived credentials in memory
+    try:
+        consumer_key = decrypt_secret(account.encrypted_consumer_key)
+        mobile = decrypt_secret(account.encrypted_mobile_number)
+        ucc = decrypt_secret(account.encrypted_ucc)
+        mpin = decrypt_secret(account.encrypted_mpin)
+        totp_secret = decrypt_secret(account.encrypted_totp_secret) if account.encrypted_totp_secret else None
+    except Exception as dec_err:
+        logger.error("Failed to decrypt stored broker credentials: %s", type(dec_err).__name__)
+        return SanitizedBrokerConnectResponse(
+            success=False,
+            broker="KOTAK_NEO",
+            status="FAILED",
+            message="Failed to decrypt stored credentials. Please re-enter your credentials."
+        )
+
+    totp_code = req.totp if req and req.totp else None
+    if not totp_code and totp_secret:
+        import pyotp
+        totp_code = pyotp.TOTP(totp_secret).now()
+
+    if not totp_code:
+        return SanitizedBrokerConnectResponse(
+            success=False,
+            broker="KOTAK_NEO",
+            status="FAILED",
+            message="A fresh 6-digit TOTP code is required to re-authenticate with Kotak Neo."
+        )
+
+    creds = {
+        "consumer_key": consumer_key,
+        "mobile_number": mobile,
+        "ucc": ucc,
+        "mpin": mpin,
+        "totp": totp_code,
+        "environment": account.session_metadata.get("environment", "prod"),
+    }
+
+    session = await kotak_neo.login(creds)
+    if session.status != "CONNECTED":
+        audit_fail = AuditLog(
+            user_id=user.id,
+            broker_account_id=account.id,
+            action="BROKER_RECONNECT_FAILED",
+            details={
+                "broker": "KOTAK_NEO",
+                "ucc_masked": account.masked_identifier,
+                "reason": session.message,
+            }
+        )
+        db.add(audit_fail)
+        await db.commit()
+
+        return SanitizedBrokerConnectResponse(
+            success=False,
+            broker="KOTAK_NEO",
+            status="FAILED",
+            message=session.message or "Kotak Neo reconnection failed. Verify your TOTP code."
+        )
+
+    # Reconnect succeeded: update encrypted session tokens
+    now = datetime.now(timezone.utc)
+    account.status = "CONNECTED"
+    account.last_authenticated_at = now
+    account.last_heartbeat_at = now
+    account.encrypted_view_token = encrypt_secret(session.view_token)
+    account.encrypted_view_sid = encrypt_secret(session.view_sid)
+    account.encrypted_trading_token = encrypt_secret(session.trading_token)
+    account.encrypted_trading_sid = encrypt_secret(session.trading_sid)
+    account.encrypted_base_url = encrypt_secret(session.base_url)
+
+    adapter = get_broker_adapter("kotak_neo", account_id=user.id, credentials=creds)
+    market_service.set_adapter(adapter)
+
+    audit_success = AuditLog(
+        user_id=user.id,
+        broker_account_id=account.id,
+        action="BROKER_RECONNECT_SUCCESS",
+        details={
+            "broker": "KOTAK_NEO",
+            "ucc_masked": account.masked_identifier,
+            "status": "CONNECTED",
+        }
+    )
+    db.add(audit_success)
+    await db.commit()
+
+    return SanitizedBrokerConnectResponse(
+        success=True,
+        broker="KOTAK_NEO",
+        status="CONNECTED",
+        account=account.masked_identifier,
+        account_id=account.id,
+        connected_at=now.isoformat(),
+        last_verified_at=now.isoformat(),
+        message="Kotak Neo reconnected successfully."
+    )
+
+
+# ------------------------------------------------------------------------------
+# Admin Actions
+# ------------------------------------------------------------------------------
+
+@router.post("/admin/brokers/{broker_account_id}/disconnect")
+async def admin_disconnect_broker(
+    broker_account_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Admin-initiated broker disconnect."""
+    stmt = select(BrokerAccount).where(BrokerAccount.id == broker_account_id)
+    result = await db.execute(stmt)
+    account = result.scalar_one_or_none()
+
+    if not account:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found.")
+
+    account.status = "DISCONNECTED"
+    account.encrypted_view_token = None
+    account.encrypted_view_sid = None
+    account.encrypted_trading_token = None
+    account.encrypted_trading_sid = None
+    account.last_heartbeat_at = datetime.now(timezone.utc)
+
+    remove_broker_adapter(account.id, account.broker)
+
+    audit = AuditLog(
+        user_id=admin.id,
+        broker_account_id=account.id,
+        action="ADMIN_BROKER_DISCONNECT",
+        details={
+            "target_user_id": account.user_id,
+            "broker": account.broker,
+            "masked_identifier": account.masked_identifier,
+        }
+    )
+    db.add(audit)
+    await db.commit()
+
+    return {"success": True, "message": f"Account {account.masked_identifier} disconnected by admin."}
+
+
+# ------------------------------------------------------------------------------
+# Portfolio, Positions, Orders
+# ------------------------------------------------------------------------------
+
+@router.get("/brokers/profile", response_model=BrokerProfile)
+@router.get("/broker/profile", response_model=BrokerProfile)
 async def get_broker_profile(user: User = Depends(get_current_user)):
     """Fetch trading account profile, margin, and funds from active adapter."""
     return await market_service.adapter.get_profile()
 
 
-@router.get("/positions", response_model=List[Position])
+@router.get("/brokers/positions", response_model=List[Position])
+@router.get("/broker/positions", response_model=List[Position])
 async def get_positions(user: User = Depends(get_current_user)):
     """Fetch today's open and closed positions."""
     return await market_service.adapter.get_positions()
 
 
-@router.get("/orders", response_model=List[Order])
+@router.get("/brokers/orders", response_model=List[Order])
+@router.get("/broker/orders", response_model=List[Order])
 async def get_orders(user: User = Depends(get_current_user)):
     """Fetch today's orders."""
     return await market_service.adapter.get_orders()
 
 
-@router.post("/orders", response_model=OrderResult)
+@router.post("/brokers/orders", response_model=OrderResult)
+@router.post("/broker/orders", response_model=OrderResult)
 async def place_order(
     req: OrderRequest,
     db: AsyncSession = Depends(get_db),
@@ -269,7 +638,6 @@ async def place_order(
     """
     result = await market_service.adapter.place_order(req)
 
-    # Audit log
     audit = AuditLog(
         user_id=user.id,
         action="ORDER_SUBMITTED",

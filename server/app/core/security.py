@@ -19,21 +19,18 @@ def get_fernet() -> Fernet:
     return _fernet
 
 
+from app.security.encryption import encrypt_secret, decrypt_secret, mask_identifier
+
+
 def encrypt_credential(plain_text: Optional[str]) -> Optional[str]:
-    """Encrypt sensitive broker secret string at rest using Fernet."""
-    if not plain_text:
-        return None
-    cipher = get_fernet()
-    return cipher.encrypt(plain_text.encode("utf-8")).decode("utf-8")
+    """Encrypt sensitive broker secret string at rest using authenticated AES-256-GCM."""
+    return encrypt_secret(plain_text)
 
 
 def decrypt_credential(cipher_text: Optional[str]) -> Optional[str]:
     """Decrypt sensitive broker secret string."""
-    if not cipher_text:
-        return None
     try:
-        cipher = get_fernet()
-        return cipher.decrypt(cipher_text.encode("utf-8")).decode("utf-8")
+        return decrypt_secret(cipher_text)
     except Exception:
         return None
 

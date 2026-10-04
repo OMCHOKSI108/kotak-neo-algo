@@ -64,12 +64,26 @@ export interface OptionChain {
 
 export interface BrokerAccount {
   id: number;
+  broker: string;
   broker_name: string;
   account_name: string;
+  status: 'CONNECTED' | 'DISCONNECTED' | 'FAILED';
   is_connected: boolean;
+  last_authenticated_at?: string;
   last_heartbeat_at?: string;
   masked_identifier: string;
   session_metadata?: Record<string, any>;
+}
+
+export interface SanitizedBrokerConnectResponse {
+  success: boolean;
+  broker: string;
+  status: string;
+  account?: string;
+  account_id?: number;
+  connected_at?: string;
+  last_verified_at?: string;
+  message?: string;
 }
 
 export interface BrokerProfile {
@@ -162,8 +176,10 @@ export interface AdminUserItem {
   created_at: string;
   broker_accounts: {
     id: number;
+    broker?: string;
     broker_name: string;
     account_name: string;
+    status?: string;
     is_connected: boolean;
     last_heartbeat_at?: string;
     masked_identifier: string;

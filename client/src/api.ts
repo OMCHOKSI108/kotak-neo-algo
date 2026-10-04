@@ -70,16 +70,25 @@ export const api = {
   },
 
   // Broker Accounts
-  getBrokerAccounts: (): Promise<BrokerAccount[]> => request('/broker/accounts'),
+  getBrokerAccounts: (): Promise<BrokerAccount[]> => request('/brokers/accounts'),
 
-  connectBroker: (data: any): Promise<BrokerAccount> =>
-    request('/broker/connect', {
+  connectBroker: (data: any): Promise<SanitizedBrokerConnectResponse> =>
+    request('/brokers/connect', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
-  disconnectBroker: (accountId: number): Promise<{ message: string }> =>
-    request(`/broker/disconnect/${accountId}`, { method: 'POST' }),
+  disconnectBroker: (accountId: number): Promise<{ success: boolean; message: string }> =>
+    request(`/brokers/${accountId}/disconnect`, { method: 'POST' }),
+
+  reconnectBroker: (accountId: number, totp?: string): Promise<SanitizedBrokerConnectResponse> =>
+    request(`/brokers/${accountId}/reconnect`, {
+      method: 'POST',
+      body: JSON.stringify({ totp }),
+    }),
+
+  adminDisconnectBroker: (accountId: number): Promise<{ success: boolean; message: string }> =>
+    request(`/admin/brokers/${accountId}/disconnect`, { method: 'POST' }),
 
   checkHeartbeat: (accountId: number): Promise<any> =>
     request(`/broker/heartbeat/${accountId}`),

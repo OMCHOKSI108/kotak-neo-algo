@@ -191,24 +191,49 @@ export const AdminDashboard: React.FC = () => {
 
                   <td className="py-3.5 px-4 text-gray-300">
                     {u.broker_accounts && u.broker_accounts.length > 0 ? (
-                      <div className="space-y-1">
+                      <div className="space-y-1.5">
                         {u.broker_accounts.map((ba) => (
                           <div
                             key={ba.id}
-                            className="p-1.5 rounded bg-[#0B0E14] border border-[#232936] text-[11px] flex items-center justify-between"
+                            className="p-2 rounded bg-[#0B0E14] border border-[#232936] text-[11px] flex items-center justify-between gap-2"
                           >
                             <div className="flex items-center space-x-1.5">
                               <Radio
                                 className={`w-2.5 h-2.5 ${ba.is_connected ? 'text-emerald-400' : 'text-gray-500'}`}
                               />
-                              <span className="font-bold text-white capitalize">
-                                {ba.broker_name.replace('_', ' ')}:
+                              <span className="font-bold text-white">
+                                {ba.broker_name === 'kotak_neo' || ba.broker === 'KOTAK_NEO' ? 'Kotak Neo' : 'Mock'}:
                               </span>
-                              <span className="text-gray-400">{ba.masked_identifier}</span>
+                              <span className="text-gray-400 font-mono">{ba.masked_identifier}</span>
+                              <span className={`text-[9px] px-1 py-0.5 rounded font-semibold ${
+                                ba.is_connected ? 'bg-emerald-500/10 text-emerald-400' : 'bg-gray-800 text-gray-500'
+                              }`}>
+                                {ba.is_connected ? 'CONNECTED' : 'DISCONNECTED'}
+                              </span>
                             </div>
-                            <span className="text-[10px] text-gray-500">
-                              {ba.last_heartbeat_at ? new Date(ba.last_heartbeat_at).toLocaleTimeString() : 'Never'}
-                            </span>
+
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-gray-500 hidden sm:inline">
+                                {ba.last_heartbeat_at ? new Date(ba.last_heartbeat_at).toLocaleTimeString() : 'Never'}
+                              </span>
+                              {ba.is_connected && (
+                                <button
+                                  onClick={async () => {
+                                    if (!window.confirm(`Disconnect broker account ${ba.masked_identifier}?`)) return;
+                                    try {
+                                      await api.adminDisconnectBroker(ba.id);
+                                      await loadData();
+                                      setSuccessMsg(`Disconnected broker account ${ba.masked_identifier}`);
+                                    } catch (err: any) {
+                                      setError(err.message);
+                                    }
+                                  }}
+                                  className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20"
+                                >
+                                  Disconnect
+                                </button>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>

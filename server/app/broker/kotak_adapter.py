@@ -583,3 +583,14 @@ class KotakNeoAdapter(BrokerAdapter):
                                 logger.debug("Error in Kotak subscriber callback: %s", e)
         except Exception as e:
             logger.error("Kotak SFeed WebSocket error: %s", e)
+
+    async def disconnect(self) -> None:
+        """Disconnect Kotak Neo session, stop WebSocket feed and clear subscribers."""
+        self._connected = False
+        if self._ws_task and not self._ws_task.done():
+            self._ws_task.cancel()
+            self._ws_task = None
+        self._client = None
+        self._subscribers.clear()
+        logger.info("Kotak Neo adapter disconnected successfully.")
+

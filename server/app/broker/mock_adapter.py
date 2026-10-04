@@ -412,3 +412,13 @@ class MockBrokerAdapter(BrokerAdapter):
                                 logger.debug("Error in market subscriber callback: %s", e)
         except asyncio.CancelledError:
             pass
+
+    async def disconnect(self) -> None:
+        """Disconnect mock broker session and stop tick generation."""
+        self._connected = False
+        if self._tick_task and not self._tick_task.done():
+            self._tick_task.cancel()
+            self._tick_task = None
+        self._subscribers.clear()
+        logger.info("Mock broker disconnected.")
+

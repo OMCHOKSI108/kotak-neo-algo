@@ -28,7 +28,11 @@ class Settings(BaseSettings):
     # Security & Encryption
     ENCRYPTION_KEY: str = Field(
         default="iAMArUJ66YJA_9C0HsIN-otQbfaJkHCwNi8lmxsMUSw=",
-        description="Fernet symmetric key for encrypting credentials at rest"
+        description="Legacy Fernet symmetric key for encrypting credentials at rest"
+    )
+    BROKER_ENCRYPTION_KEY: Optional[str] = Field(
+        default="3d115d4341000b58bd19a63509aa4235d548e3f092e205660847c961f52163da",
+        description="256-bit key for authenticated AES-256-GCM broker credential encryption"
     )
     JWT_SECRET_KEY: str = "algo_platform_super_secret_jwt_key_2026_change_in_prod"
     JWT_ALGORITHM: str = "HS256"

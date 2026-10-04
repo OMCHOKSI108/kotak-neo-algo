@@ -27,8 +27,10 @@ class UpdateUserStatusRequest(BaseModel):
 
 class BrokerAccountSummary(BaseModel):
     id: int
+    broker: str
     broker_name: str
     account_name: str
+    status: str
     is_connected: bool
     last_heartbeat_at: Optional[datetime] = None
     masked_identifier: str
@@ -48,6 +50,7 @@ class AdminUserItem(BaseModel):
 class AuditLogItem(BaseModel):
     id: int
     user_id: Optional[int]
+    broker_account_id: Optional[int] = None
     action: str
     details: Dict[str, Any]
     created_at: datetime
@@ -73,8 +76,10 @@ async def list_users(
             ba_summaries.append(
                 BrokerAccountSummary(
                     id=ba.id,
+                    broker=ba.broker,
                     broker_name=ba.broker_name,
                     account_name=ba.account_name,
+                    status=ba.status,
                     is_connected=ba.is_connected,
                     last_heartbeat_at=ba.last_heartbeat_at,
                     masked_identifier=ba.masked_identifier or "N/A"
@@ -128,10 +133,9 @@ async def create_user(
     # Pre-assign a mock broker account so user can test immediately
     default_mock_acc = BrokerAccount(
         user_id=new_user.id,
-        broker_name="mock_broker",
+        broker="MOCK_BROKER",
         account_name="Simulated Paper Broker",
-        is_active=True,
-        is_connected=True,
+        status="CONNECTED",
         masked_identifier="MOCK-PAPER-" + str(new_user.id).zfill(3),
         session_metadata={"status": "connected", "type": "simulator"}
     )
@@ -156,8 +160,10 @@ async def create_user(
         broker_accounts=[
             BrokerAccountSummary(
                 id=default_mock_acc.id,
+                broker=default_mock_acc.broker,
                 broker_name=default_mock_acc.broker_name,
                 account_name=default_mock_acc.account_name,
+                status=default_mock_acc.status,
                 is_connected=default_mock_acc.is_connected,
                 last_heartbeat_at=default_mock_acc.last_heartbeat_at,
                 masked_identifier=default_mock_acc.masked_identifier

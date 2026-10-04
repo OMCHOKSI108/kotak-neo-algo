@@ -35,10 +35,9 @@ async def init_db():
             # Create default Mock Broker account for immediate testing
             mock_account = BrokerAccount(
                 user_id=admin_user.id,
-                broker_name="mock_broker",
+                broker="MOCK_BROKER",
                 account_name="Paper / Simulated Broker",
-                is_active=True,
-                is_connected=True,
+                status="CONNECTED",
                 masked_identifier="MOCK-PAPER-001",
                 session_metadata={"status": "connected", "type": "simulator"}
             )
