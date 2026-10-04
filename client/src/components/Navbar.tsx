@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { User } from '../types';
 import {
-  TrendingUp, Shield, Activity, Radio, User as UserIcon,
-  LogOut, Layers, BarChart2, ShieldCheck, Settings, UserPlus
+  TrendingUp, Activity, Layers, BarChart2, Settings,
+  ShieldCheck, UserPlus, LogOut, ChevronDown, User as UserIcon, Menu, X
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -22,160 +22,253 @@ export const Navbar: React.FC<NavbarProps> = ({
   isWsConnected,
   onOpenCreateUser,
 }) => {
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const isAdmin = user.role === 'admin';
 
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Compute user initials for avatar
+  const getInitials = (name?: string, email?: string) => {
+    if (name && name.trim()) {
+      const parts = name.trim().split(' ');
+      if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+      return parts[0].slice(0, 2).toUpperCase();
+    }
+    if (email) return email.slice(0, 2).toUpperCase();
+    return 'US';
+  };
+
+  const navItems = [
+    { id: 'market', label: 'Market', icon: Activity },
+    { id: 'option-chain', label: 'Option Chain', icon: Layers },
+    { id: 'backtest', label: 'Backtest', icon: BarChart2 },
+    { id: 'broker', label: 'Brokers', icon: Settings },
+    ...(isAdmin ? [{ id: 'admin', label: 'Users', icon: ShieldCheck }] : []),
+  ];
+
+  const handleTabClick = (tabId: string) => {
+    setActiveTab(tabId);
+    setMobileMenuOpen(false);
+  };
+
   return (
-    <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm font-sans">
+    <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-xs font-sans">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo & Brand */}
+        <div className="flex items-center justify-between h-15">
+          {/* Left: Brand Logo & Title */}
           <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 shadow-sm">
-              <TrendingUp className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="text-base font-bold tracking-tight text-gray-900 flex items-center space-x-1.5">
-                <span>Kotak Neo Algo</span>
-                <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
-                  V1.0
+            <button
+              onClick={() => handleTabClick('market')}
+              className="flex items-center space-x-2.5 focus:outline-none text-left"
+            >
+              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-xs">
+                <TrendingUp className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-sm font-bold tracking-tight text-gray-900 block leading-tight">
+                  NeoAlgo
                 </span>
-              </span>
-              <p className="text-[11px] text-gray-500 font-medium">Algorithmic Research Platform</p>
-            </div>
+                <span className="text-[10px] text-gray-500 font-medium block leading-none">
+                  Trading Terminal
+                </span>
+              </div>
+            </button>
           </div>
 
-          {/* Navigation Links */}
-          <nav className="hidden md:flex space-x-1">
-            <button
-              onClick={() => setActiveTab('market')}
-              className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === 'market'
-                  ? 'bg-blue-50 text-blue-700 font-semibold border border-blue-200'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-              }`}
-            >
-              <Activity className="w-4 h-4" />
-              <span>Live Market</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('option-chain')}
-              className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === 'option-chain'
-                  ? 'bg-blue-50 text-blue-700 font-semibold border border-blue-200'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-              }`}
-            >
-              <Layers className="w-4 h-4" />
-              <span>Option Chain</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('backtest')}
-              className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === 'backtest'
-                  ? 'bg-blue-50 text-blue-700 font-semibold border border-blue-200'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-              }`}
-            >
-              <BarChart2 className="w-4 h-4" />
-              <span>Backtesting Lab</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('broker')}
-              className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === 'broker'
-                  ? 'bg-blue-50 text-blue-700 font-semibold border border-blue-200'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-              }`}
-            >
-              <Settings className="w-4 h-4" />
-              <span>Broker Setup</span>
-            </button>
-
-            {/* Admin only tab */}
-            {isAdmin && (
-              <button
-                onClick={() => setActiveTab('admin')}
-                className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === 'admin'
-                    ? 'bg-purple-50 text-purple-700 font-semibold border border-purple-200'
-                    : 'text-gray-600 hover:text-purple-700 hover:bg-purple-50'
-                }`}
-              >
-                <ShieldCheck className="w-4 h-4 text-purple-600" />
-                <span>Admin Panel</span>
-              </button>
-            )}
+          {/* Center: Clean Segmented Navigation Links */}
+          <nav className="hidden md:flex items-center space-x-1">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleTabClick(item.id)}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    isActive
+                      ? 'bg-gray-100 text-gray-900 font-bold shadow-xs'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                >
+                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-blue-600' : 'text-gray-400'}`} />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
           </nav>
 
-          {/* Right Status Badges & User Menu */}
+          {/* Right: Feed Status, Quick Actions, Profile Dropdown */}
           <div className="flex items-center space-x-3">
-            {/* Quick Admin + Create User Button */}
+            {/* Live Feed Pill Indicator */}
+            <div
+              className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-gray-50 border border-gray-200 text-gray-600"
+              title={isWsConnected ? 'Market data feed is connected' : 'Connecting to market feed...'}
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  isWsConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
+                }`}
+              />
+              <span className="hidden sm:inline font-mono">{isWsConnected ? 'Feed Live' : 'Feed Offline'}</span>
+            </div>
+
+            {/* Admin Quick Action Button: + Add User */}
             {isAdmin && onOpenCreateUser && (
               <button
                 onClick={onOpenCreateUser}
-                className="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition-all"
-                title="Create a new user account"
+                className="hidden sm:flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors shadow-xs"
+                title="Create a new trader account"
               >
                 <UserPlus className="w-3.5 h-3.5" />
                 <span>+ User</span>
               </button>
             )}
 
-            {/* Account Role Badge (Admin vs Trader) */}
-            <div
-              className={`flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold border ${
-                isAdmin
-                  ? 'bg-purple-50 text-purple-700 border-purple-200'
-                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-              }`}
-              title={isAdmin ? 'Administrator Account (Full Privileges)' : 'Trader Account (Standard Privileges)'}
-            >
-              {isAdmin ? (
-                <>
-                  <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
-                  <span>ADMIN</span>
-                </>
-              ) : (
-                <>
-                  <UserIcon className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>TRADER</span>
-                </>
+            {/* Profile Dropdown Menu */}
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+                className="flex items-center space-x-2 p-1 pl-1.5 pr-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors focus:outline-none"
+              >
+                {/* Initials Avatar */}
+                <div className={`w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-bold text-white ${
+                  isAdmin ? 'bg-purple-600' : 'bg-blue-600'
+                }`}>
+                  {getInitials(user.full_name, user.email)}
+                </div>
+
+                <div className="hidden sm:block text-left">
+                  <span className="text-xs font-semibold text-gray-900 block leading-none max-w-[90px] truncate">
+                    {user.full_name?.split(' ')[0] || 'User'}
+                  </span>
+                </div>
+
+                <ChevronDown className="w-3 h-3 text-gray-400" />
+              </button>
+
+              {/* Dropdown Content Card */}
+              {dropdownOpen && (
+                <div className="absolute right-0 mt-2 w-60 bg-white border border-gray-200 rounded-xl shadow-lg p-2 z-50 text-xs animate-fade-in font-sans">
+                  {/* User Profile Summary */}
+                  <div className="p-2.5 border-b border-gray-100">
+                    <p className="font-bold text-gray-900 text-sm truncate">{user.full_name}</p>
+                    <p className="text-gray-500 font-mono text-[11px] truncate mt-0.5">{user.email}</p>
+                    <div className="mt-2">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                        isAdmin
+                          ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                          : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      }`}>
+                        {isAdmin ? 'Administrator' : 'Trader Account'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Menu Options */}
+                  <div className="py-1">
+                    {isAdmin && (
+                      <>
+                        <button
+                          onClick={() => {
+                            setDropdownOpen(false);
+                            setActiveTab('admin');
+                          }}
+                          className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 font-medium flex items-center justify-between"
+                        >
+                          <span className="flex items-center space-x-2">
+                            <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+                            <span>User Management</span>
+                          </span>
+                        </button>
+
+                        {onOpenCreateUser && (
+                          <button
+                            onClick={() => {
+                              setDropdownOpen(false);
+                              onOpenCreateUser();
+                            }}
+                            className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 font-medium flex items-center space-x-2"
+                          >
+                            <UserPlus className="w-3.5 h-3.5 text-blue-600" />
+                            <span>Create New User</span>
+                          </button>
+                        )}
+                      </>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        setDropdownOpen(false);
+                        setActiveTab('broker');
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 font-medium flex items-center space-x-2"
+                    >
+                      <Settings className="w-3.5 h-3.5 text-gray-500" />
+                      <span>Broker Accounts</span>
+                    </button>
+                  </div>
+
+                  {/* Logout Divider */}
+                  <div className="pt-1 border-t border-gray-100">
+                    <button
+                      onClick={() => {
+                        setDropdownOpen(false);
+                        onLogout();
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-red-50 text-red-600 font-medium flex items-center space-x-2 transition-colors"
+                    >
+                      <LogOut className="w-3.5 h-3.5 text-red-500" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
 
-            {/* WebSocket Stream Indicator */}
-            <div
-              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-medium border ${
-                isWsConnected
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  : 'bg-red-50 text-red-700 border-red-200'
-              }`}
-              title={isWsConnected ? 'Connected to FastAPI Internal Feed' : 'Connecting to Feed...'}
+            {/* Mobile Hamburger Button */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden p-1.5 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:outline-none"
             >
-              <Radio className={`w-3 h-3 ${isWsConnected ? 'animate-pulse text-emerald-600' : 'text-red-500'}`} />
-              <span className="hidden sm:inline">{isWsConnected ? 'LIVE FEED' : 'OFFLINE'}</span>
-            </div>
-
-            {/* User Profile Info */}
-            <div className="flex items-center space-x-2 pl-2 border-l border-gray-200">
-              <div className="text-right hidden sm:block">
-                <p className="text-xs font-bold text-gray-900 leading-none">{user.full_name}</p>
-                <p className="text-[10px] text-gray-500 font-mono truncate max-w-[120px] mt-0.5">{user.email}</p>
-              </div>
-
-              <button
-                onClick={onLogout}
-                title="Log out"
-                className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-gray-100 transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </div>
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
           </div>
         </div>
+
+        {/* Mobile Navigation Drawer */}
+        {mobileMenuOpen && (
+          <div className="md:hidden py-3 border-t border-gray-200 space-y-1">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleTabClick(item.id)}
+                  className={`w-full flex items-center space-x-2 px-3 py-2 rounded-lg text-xs font-semibold ${
+                    isActive
+                      ? 'bg-blue-50 text-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </header>
   );

@@ -151,28 +151,23 @@ export const App: React.FC = () => {
       )}
 
       {/* Bottom Status Footer */}
-      <footer className="bg-white border-t border-gray-200 py-3 px-4 sm:px-6 lg:px-8 text-xs text-gray-600 flex flex-col sm:flex-row items-center justify-between space-y-2 sm:space-y-0 shadow-xs">
-        <div className="flex items-center space-x-4">
+      <footer className="bg-white border-t border-gray-200 py-2.5 px-4 sm:px-6 lg:px-8 text-xs text-gray-500 flex flex-col sm:flex-row items-center justify-between space-y-2 sm:space-y-0">
+        <div className="flex items-center space-x-3 text-[11px] font-mono">
           <div className="flex items-center space-x-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span className="font-mono text-gray-700 font-medium">Backend API: Online</span>
+            <span className="text-gray-700">API Connected</span>
           </div>
-          <span className="text-gray-300">|</span>
+          <span className="text-gray-300">·</span>
           <div className="flex items-center space-x-1.5">
-            <span className={`w-2 h-2 rounded-full ${isWsConnected ? 'bg-emerald-500' : 'bg-red-500 animate-pulse'}`}></span>
-            <span className="font-mono text-gray-700 font-medium">
-              Internal WebSocket: {isWsConnected ? 'Live Tick Feed' : 'Connecting...'}
-            </span>
+            <span className={`w-2 h-2 rounded-full ${isWsConnected ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+            <span className="text-gray-700">{isWsConnected ? 'Feed Active' : 'Feed Offline'}</span>
           </div>
         </div>
 
-        <div className="flex items-center space-x-4">
-          <span className="font-mono text-amber-800 font-semibold flex items-center space-x-1">
-            <ShieldCheck className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
-            V1 Paper Sandbox Mode Active
-          </span>
-          <span className="text-gray-300">|</span>
-          <span className="text-gray-500 font-mono">FastAPI + React + PostgreSQL</span>
+        <div className="flex items-center space-x-3 text-[11px]">
+          <span className="text-gray-600 font-medium">Safe Mode: Paper Simulation</span>
+          <span className="text-gray-300">·</span>
+          <span className="text-gray-400 font-mono">Kotak Neo Algo</span>
         </div>
       </footer>
     </div>
