@@ -82,13 +82,13 @@ export const OptionChainPage: React.FC<OptionChainPageProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans">
       {/* Header & Tabs */}
-      <div className="bg-[#151922] border border-[#232936] rounded-xl p-5 shadow-lg">
+      <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           {/* Index Tabs */}
           <div>
-            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider font-mono">
+            <span className="text-xs font-bold text-gray-500 uppercase tracking-wider font-mono">
               Underlying Index
             </span>
             <div className="flex space-x-2 mt-1">
@@ -101,8 +101,8 @@ export const OptionChainPage: React.FC<OptionChainPageProps> = ({
                   }}
                   className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
                     underlying === u
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
-                      : 'bg-[#0B0E14] text-gray-400 hover:text-white border border-[#232936]'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'bg-white text-gray-700 hover:text-black border border-gray-300 hover:bg-gray-50'
                   }`}
                 >
                   {u}
@@ -114,34 +114,34 @@ export const OptionChainPage: React.FC<OptionChainPageProps> = ({
           {/* Underling LTP & PCR Stats */}
           {chain && (
             <div className="flex items-center space-x-6 font-mono text-xs">
-              <div className="border-r border-[#232936] pr-6">
-                <span className="text-gray-400 block">Underlying LTP</span>
-                <span className="text-lg font-bold text-white">₹{formatPrice(chain.underlying_ltp)}</span>
+              <div className="border-r border-gray-200 pr-6">
+                <span className="text-gray-500 block">Underlying LTP</span>
+                <span className="text-lg font-extrabold text-black">₹{formatPrice(chain.underlying_ltp)}</span>
               </div>
-              <div className="border-r border-[#232936] pr-6">
-                <span className="text-gray-400 block">PCR (OI)</span>
-                <span className={`text-lg font-bold ${Number(pcr) > 1 ? 'text-emerald-400' : 'text-red-400'}`}>
+              <div className="border-r border-gray-200 pr-6">
+                <span className="text-gray-500 block">PCR (OI)</span>
+                <span className={`text-lg font-extrabold ${Number(pcr) > 1 ? 'text-emerald-700' : 'text-red-700'}`}>
                   {pcr}
                 </span>
               </div>
               <div>
-                <span className="text-gray-400 block">Lot Size</span>
-                <span className="text-lg font-bold text-blue-400">{chain.lot_size}</span>
+                <span className="text-gray-500 block">Lot Size</span>
+                <span className="text-lg font-extrabold text-blue-700">{chain.lot_size}</span>
               </div>
             </div>
           )}
 
           {/* Expiry & Strike Controls */}
           <div className="flex items-center space-x-3">
-            <div className="flex items-center space-x-2 bg-[#0B0E14] border border-[#232936] rounded-lg px-3 py-1.5">
-              <Calendar className="w-4 h-4 text-gray-400" />
+            <div className="flex items-center space-x-2 bg-white border border-gray-300 rounded-lg px-3 py-1.5 shadow-xs">
+              <Calendar className="w-4 h-4 text-gray-500" />
               <select
                 value={selectedExpiry}
                 onChange={(e) => setSelectedExpiry(e.target.value)}
-                className="bg-transparent text-xs text-white focus:outline-none font-mono"
+                className="bg-transparent text-xs text-gray-900 focus:outline-none font-mono font-medium"
               >
                 {chain?.expiries.map((exp) => (
-                  <option key={exp} value={exp} className="bg-[#151922] text-white">
+                  <option key={exp} value={exp} className="bg-white text-gray-900">
                     {exp}
                   </option>
                 ))}
@@ -151,56 +151,56 @@ export const OptionChainPage: React.FC<OptionChainPageProps> = ({
             <button
               onClick={() => fetchChain(underlying, selectedExpiry)}
               disabled={loading}
-              className="p-2 rounded-lg bg-[#0B0E14] border border-[#232936] text-gray-400 hover:text-white transition-colors"
+              className="p-2 rounded-lg bg-white border border-gray-300 text-gray-600 hover:text-black hover:bg-gray-50 transition-colors shadow-xs"
               title="Refresh Option Chain"
             >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-400' : ''}`} />
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-600' : ''}`} />
             </button>
           </div>
         </div>
       </div>
 
       {error && (
-        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center space-x-3">
+        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold flex items-center space-x-3">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       {/* Option Chain Table */}
-      <div className="bg-[#151922] border border-[#232936] rounded-xl overflow-hidden shadow-xl">
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-center border-collapse text-xs font-mono">
             <thead>
               {/* Top grouping header */}
-              <tr className="border-b border-[#232936] bg-[#10141D] text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-                <th colSpan={6} className="py-2.5 px-3 border-r border-[#232936] text-emerald-400">
+              <tr className="border-b border-gray-200 bg-gray-50 text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                <th colSpan={6} className="py-2.5 px-3 border-r border-gray-200 text-emerald-800">
                   CALL OPTIONS (CE)
                 </th>
-                <th className="py-2.5 px-4 bg-[#181D28] text-white font-extrabold border-r border-l border-[#232936]">
+                <th className="py-2.5 px-4 bg-gray-100 text-black font-extrabold border-r border-l border-gray-200">
                   STRIKE
                 </th>
-                <th colSpan={6} className="py-2.5 px-3 border-l border-[#232936] text-red-400">
+                <th colSpan={6} className="py-2.5 px-3 border-l border-gray-200 text-red-800">
                   PUT OPTIONS (PE)
                 </th>
               </tr>
               {/* Column header */}
-              <tr className="border-b border-[#232936] bg-[#0E121A] text-[10px] text-gray-400 uppercase">
+              <tr className="border-b border-gray-200 bg-gray-50 text-[10px] text-gray-600 font-bold uppercase">
                 {/* Calls */}
                 <th className="py-2 px-3">OI</th>
                 <th className="py-2 px-3">Chg OI</th>
                 <th className="py-2 px-3">Volume</th>
                 <th className="py-2 px-3">Bid</th>
                 <th className="py-2 px-3">Ask</th>
-                <th className="py-2 px-3 border-r border-[#232936] text-emerald-400 font-bold">LTP</th>
+                <th className="py-2 px-3 border-r border-gray-200 text-emerald-800 font-bold">LTP</th>
 
                 {/* Strike */}
-                <th className="py-2 px-4 bg-[#141923] text-white font-bold border-r border-l border-[#232936]">
+                <th className="py-2 px-4 bg-gray-100 text-black font-bold border-r border-l border-gray-200">
                   Price
                 </th>
 
                 {/* Puts */}
-                <th className="py-2 px-3 border-l border-[#232936] text-red-400 font-bold">LTP</th>
+                <th className="py-2 px-3 border-l border-gray-200 text-red-800 font-bold">LTP</th>
                 <th className="py-2 px-3">Bid</th>
                 <th className="py-2 px-3">Ask</th>
                 <th className="py-2 px-3">Volume</th>
@@ -208,7 +208,7 @@ export const OptionChainPage: React.FC<OptionChainPageProps> = ({
                 <th className="py-2 px-3">OI</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#232936]/60">
+            <tbody className="divide-y divide-gray-100">
               {displayedStrikes.map((s) => {
                 const isATM = s.strike_price === atmStrike;
                 const callITM = s.strike_price < (chain?.underlying_ltp || 0);
@@ -217,33 +217,33 @@ export const OptionChainPage: React.FC<OptionChainPageProps> = ({
                 return (
                   <tr
                     key={s.strike_price}
-                    className={`hover:bg-[#1D2330] transition-colors ${
-                      isATM ? 'bg-blue-600/10 font-bold' : ''
+                    className={`hover:bg-gray-50/80 transition-colors ${
+                      isATM ? 'bg-amber-50/30' : ''
                     }`}
                   >
                     {/* Call Columns */}
-                    <td className={`py-2 px-3 ${callITM ? 'bg-emerald-950/15' : ''} text-gray-300`}>
+                    <td className={`py-2 px-3 ${callITM ? 'bg-emerald-50/60 font-semibold' : ''} text-gray-700`}>
                       {formatNum(s.call?.open_interest)}
                     </td>
                     <td
-                      className={`py-2 px-3 ${callITM ? 'bg-emerald-950/15' : ''} ${
-                        (s.call?.change_oi || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'
+                      className={`py-2 px-3 ${callITM ? 'bg-emerald-50/60' : ''} ${
+                        (s.call?.change_oi || 0) >= 0 ? 'text-emerald-700 font-semibold' : 'text-red-700 font-semibold'
                       }`}
                     >
                       {(s.call?.change_oi || 0) >= 0 ? '+' : ''}{formatNum(s.call?.change_oi)}
                     </td>
-                    <td className={`py-2 px-3 ${callITM ? 'bg-emerald-950/15' : ''} text-gray-400`}>
+                    <td className={`py-2 px-3 ${callITM ? 'bg-emerald-50/60' : ''} text-gray-600`}>
                       {formatNum(s.call?.volume)}
                     </td>
-                    <td className={`py-2 px-3 ${callITM ? 'bg-emerald-950/15' : ''} text-gray-300`}>
+                    <td className={`py-2 px-3 ${callITM ? 'bg-emerald-50/60' : ''} text-gray-700`}>
                       {formatPrice(s.call?.bid)}
                     </td>
-                    <td className={`py-2 px-3 ${callITM ? 'bg-emerald-950/15' : ''} text-gray-300`}>
+                    <td className={`py-2 px-3 ${callITM ? 'bg-emerald-50/60' : ''} text-gray-700`}>
                       {formatPrice(s.call?.ask)}
                     </td>
                     <td
-                      className={`py-2 px-3 border-r border-[#232936] font-bold text-white ${
-                        callITM ? 'bg-emerald-950/25 text-emerald-300' : ''
+                      className={`py-2 px-3 border-r border-gray-200 font-bold text-gray-900 ${
+                        callITM ? 'bg-emerald-50/80 text-emerald-900' : ''
                       }`}
                     >
                       ₹{formatPrice(s.call?.ltp)}
@@ -251,39 +251,39 @@ export const OptionChainPage: React.FC<OptionChainPageProps> = ({
 
                     {/* Strike */}
                     <td
-                      className={`py-2 px-4 bg-[#131722] text-white font-extrabold border-r border-l border-[#232936] ${
-                        isATM ? 'text-amber-400 bg-amber-400/10 ring-1 ring-amber-400' : ''
+                      className={`py-2 px-4 bg-gray-50 text-black font-extrabold border-r border-l border-gray-200 ${
+                        isATM ? 'bg-amber-100 text-amber-950 font-extrabold ring-1 ring-amber-400' : ''
                       }`}
                     >
                       <span>{s.strike_price}</span>
-                      {isATM && <span className="ml-1 text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300">ATM</span>}
+                      {isATM && <span className="ml-1 text-[9px] px-1 py-0.5 rounded bg-amber-200 text-amber-900 font-bold">ATM</span>}
                     </td>
 
                     {/* Put Columns */}
                     <td
-                      className={`py-2 px-3 border-l border-[#232936] font-bold text-white ${
-                        putITM ? 'bg-red-950/25 text-red-300' : ''
+                      className={`py-2 px-3 border-l border-gray-200 font-bold text-gray-900 ${
+                        putITM ? 'bg-red-50/80 text-red-900' : ''
                       }`}
                     >
                       ₹{formatPrice(s.put?.ltp)}
                     </td>
-                    <td className={`py-2 px-3 ${putITM ? 'bg-red-950/15' : ''} text-gray-300`}>
+                    <td className={`py-2 px-3 ${putITM ? 'bg-red-50/60' : ''} text-gray-700`}>
                       {formatPrice(s.put?.bid)}
                     </td>
-                    <td className={`py-2 px-3 ${putITM ? 'bg-red-950/15' : ''} text-gray-300`}>
+                    <td className={`py-2 px-3 ${putITM ? 'bg-red-50/60' : ''} text-gray-700`}>
                       {formatPrice(s.put?.ask)}
                     </td>
-                    <td className={`py-2 px-3 ${putITM ? 'bg-red-950/15' : ''} text-gray-400`}>
+                    <td className={`py-2 px-3 ${putITM ? 'bg-red-50/60' : ''} text-gray-600`}>
                       {formatNum(s.put?.volume)}
                     </td>
                     <td
-                      className={`py-2 px-3 ${putITM ? 'bg-red-950/15' : ''} ${
-                        (s.put?.change_oi || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'
+                      className={`py-2 px-3 ${putITM ? 'bg-red-50/60' : ''} ${
+                        (s.put?.change_oi || 0) >= 0 ? 'text-emerald-700 font-semibold' : 'text-red-700 font-semibold'
                       }`}
                     >
                       {(s.put?.change_oi || 0) >= 0 ? '+' : ''}{formatNum(s.put?.change_oi)}
                     </td>
-                    <td className={`py-2 px-3 ${putITM ? 'bg-red-950/15' : ''} text-gray-300`}>
+                    <td className={`py-2 px-3 ${putITM ? 'bg-red-50/60 font-semibold' : ''} text-gray-700`}>
                       {formatNum(s.put?.open_interest)}
                     </td>
                   </tr>

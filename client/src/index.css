@@ -4,40 +4,46 @@
 
 :root {
   font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-  color-scheme: dark;
+  color-scheme: light;
+}
+
+body {
+  background-color: #F8FAFC;
+  color: #0F172A;
+  margin: 0;
 }
 
 code, kbd, samp, pre, .font-mono {
   font-family: 'JetBrains Mono', monospace;
 }
 
-/* Custom scrollbars */
+/* Custom scrollbars for clean light theme */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0B0E14;
+  background: #F1F5F9;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #232936;
+  background: #CBD5E1;
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3B82F6;
+  background: #94A3B8;
 }
 
 /* Flash tick animation */
 @keyframes flashGreen {
-  0% { background-color: rgba(16, 185, 129, 0.4); }
+  0% { background-color: rgba(16, 185, 129, 0.25); }
   100% { background-color: transparent; }
 }
 
 @keyframes flashRed {
-  0% { background-color: rgba(239, 68, 68, 0.4); }
+  0% { background-color: rgba(239, 68, 68, 0.25); }
   100% { background-color: transparent; }
 }
 

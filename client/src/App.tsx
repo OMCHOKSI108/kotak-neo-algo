@@ -9,13 +9,15 @@ import { OptionChainPage } from './pages/OptionChainPage';
 import { BrokerSettingsPage } from './pages/BrokerSettingsPage';
 import { BacktestingLab } from './pages/BacktestingLab';
 import { AdminDashboard } from './pages/AdminDashboard';
-import { ShieldCheck, Server, AlertCircle } from 'lucide-react';
+import { CreateUserModal } from './components/CreateUserModal';
+import { ShieldCheck, AlertCircle } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<string>('market');
   const [selectedOptionUnderlying, setSelectedOptionUnderlying] = useState<string>('NIFTY');
   const [loadingInitial, setLoadingInitial] = useState(true);
+  const [showGlobalCreateUserModal, setShowGlobalCreateUserModal] = useState(false);
 
   // Real-time market data hook
   const { quotes, isConnected: isWsConnected, flashStates } = useMarketData();
@@ -35,7 +37,6 @@ export const App: React.FC = () => {
             localStorage.setItem('user', JSON.stringify(freshUser));
           })
           .catch(() => {
-            // Token might be invalid or expired
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             setUser(null);
@@ -65,7 +66,6 @@ export const App: React.FC = () => {
   };
 
   const handleNavigateOptionChain = (symbol: string) => {
-    // Normalize index symbol names for option chain
     let cleanSym = symbol;
     if (symbol.includes('NIFTY 50') || symbol === 'NIFTY') cleanSym = 'NIFTY';
     else if (symbol.includes('BANKNIFTY')) cleanSym = 'BANKNIFTY';
@@ -77,11 +77,11 @@ export const App: React.FC = () => {
 
   if (loadingInitial) {
     return (
-      <div className="min-h-screen bg-[#0E1117] flex items-center justify-center">
+      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center font-sans">
         <div className="flex flex-col items-center space-y-4">
-          <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
-          <p className="text-gray-400 text-sm font-mono tracking-wide">
-            Initializing Kotak Neo Algo Platform...
+          <div className="w-10 h-10 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin" />
+          <p className="text-gray-600 text-xs font-semibold tracking-wide">
+            Loading Trading Workspace...
           </p>
         </div>
       </div>
@@ -93,7 +93,7 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0E1117] text-gray-100 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
+    <div className="min-h-screen bg-[#F8FAFC] text-gray-900 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
       {/* Top Navigation */}
       <Navbar
         user={user}
@@ -101,6 +101,7 @@ export const App: React.FC = () => {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         isWsConnected={isWsConnected}
+        onOpenCreateUser={() => setShowGlobalCreateUserModal(true)}
       />
 
       {/* Main Content Area */}
@@ -110,6 +111,7 @@ export const App: React.FC = () => {
             quotes={quotes}
             flashStates={flashStates}
             onNavigateOptionChain={handleNavigateOptionChain}
+            user={user}
           />
         )}
 
@@ -129,40 +131,48 @@ export const App: React.FC = () => {
           user.role === 'admin' ? (
             <AdminDashboard />
           ) : (
-            <div className="bg-[#151922] border border-red-500/20 rounded-xl p-8 text-center max-w-md mx-auto my-12">
-              <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-3" />
-              <h3 className="text-lg font-bold text-white mb-2">Access Restricted</h3>
-              <p className="text-sm text-gray-400">
-                You need Administrator privileges to access user management and audit logs.
+            <div className="bg-white border border-red-200 rounded-xl p-8 text-center max-w-md mx-auto my-12 shadow-sm">
+              <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+              <h3 className="text-base font-bold text-gray-900 mb-1">Access Restricted</h3>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                You are currently logged in with a standard <span className="font-semibold text-gray-800">Trader Account</span>. Administrator privileges are required to manage users and view server security audits.
               </p>
             </div>
           )
         )}
       </main>
 
+      {/* Global Admin User Creation Modal */}
+      {user.role === 'admin' && (
+        <CreateUserModal
+          isOpen={showGlobalCreateUserModal}
+          onClose={() => setShowGlobalCreateUserModal(false)}
+        />
+      )}
+
       {/* Bottom Status Footer */}
-      <footer className="bg-[#151922] border-t border-[#232936] py-3 px-4 sm:px-6 lg:px-8 text-xs text-gray-500 flex flex-col sm:flex-row items-center justify-between space-y-2 sm:space-y-0">
+      <footer className="bg-white border-t border-gray-200 py-3 px-4 sm:px-6 lg:px-8 text-xs text-gray-600 flex flex-col sm:flex-row items-center justify-between space-y-2 sm:space-y-0 shadow-xs">
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-            <span className="font-mono text-gray-400">Backend API: Online</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span className="font-mono text-gray-700 font-medium">Backend API: Online</span>
           </div>
-          <span className="text-gray-700">|</span>
+          <span className="text-gray-300">|</span>
           <div className="flex items-center space-x-1.5">
-            <span className={`w-2 h-2 rounded-full ${isWsConnected ? 'bg-emerald-400' : 'bg-red-400 animate-pulse'}`}></span>
-            <span className="font-mono text-gray-400">
-              WebSocket: {isWsConnected ? 'Connected (Active Feed)' : 'Reconnecting...'}
+            <span className={`w-2 h-2 rounded-full ${isWsConnected ? 'bg-emerald-500' : 'bg-red-500 animate-pulse'}`}></span>
+            <span className="font-mono text-gray-700 font-medium">
+              Internal WebSocket: {isWsConnected ? 'Live Tick Feed' : 'Connecting...'}
             </span>
           </div>
         </div>
 
         <div className="flex items-center space-x-4">
-          <span className="font-mono text-amber-400/90 flex items-center space-x-1">
-            <ShieldCheck className="w-3.5 h-3.5 inline mr-1 text-amber-400" />
+          <span className="font-mono text-amber-800 font-semibold flex items-center space-x-1">
+            <ShieldCheck className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
             V1 Paper Sandbox Mode Active
           </span>
-          <span className="text-gray-700">|</span>
-          <span className="text-gray-500">PostgreSQL + FastAPI + React</span>
+          <span className="text-gray-300">|</span>
+          <span className="text-gray-500 font-mono">FastAPI + React + PostgreSQL</span>
         </div>
       </footer>
     </div>
