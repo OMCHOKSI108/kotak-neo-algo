@@ -2,10 +2,24 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 from app.broker.schemas import Quote, OptionChain
 from app.market.service import market_service, DEFAULT_WATCHLIST
+from app.market.symbol_master import SymbolSearchResult, search_symbols
 from app.api.deps import get_current_user
 from app.models.models import User
 
 router = APIRouter(prefix="/market", tags=["Market Data"])
+
+
+@router.get("/search", response_model=List[SymbolSearchResult])
+async def search_market_symbols(
+    query: str = Query("", description="Symbol ticker or company name"),
+    exchange: Optional[str] = Query(None, description="Filter exchange: NSE or BSE"),
+    limit: int = Query(15, ge=1, le=50),
+    user: User = Depends(get_current_user)
+):
+    """
+    Search instruments and stocks across NSE and BSE by symbol ticker or company name.
+    """
+    return search_symbols(query=query, exchange=exchange, limit=limit)
 
 
 @router.get("/quotes", response_model=List[Quote])

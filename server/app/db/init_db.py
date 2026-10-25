@@ -15,18 +15,18 @@ async def init_db():
         await conn.run_sync(Base.metadata.create_all)
 
     async with AsyncSessionLocal() as session:
-        # Check if Admin user exists
-        stmt = select(User).where((User.email == settings.ADMIN_EMAIL) | (User.role == "admin"))
+        # Check if SuperAdmin / Admin user exists
+        stmt = select(User).where((User.email == settings.ADMIN_EMAIL) | (User.role.in_(["superadmin", "admin"])))
         result = await session.execute(stmt)
         admin_user = result.scalars().first()
 
         if not admin_user:
-            logger.info("Creating default administrator account: %s", settings.ADMIN_EMAIL)
+            logger.info("Creating default SuperAdmin account: %s", settings.ADMIN_EMAIL)
             admin_user = User(
                 email=settings.ADMIN_EMAIL,
                 hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
                 full_name=settings.ADMIN_NAME,
-                role="admin",
+                role="superadmin",
                 is_active=True
             )
             session.add(admin_user)
@@ -36,11 +36,16 @@ async def init_db():
             audit = AuditLog(
                 user_id=admin_user.id,
                 action="SYSTEM_BOOTSTRAP",
-                details={"message": "Database initialized, admin account seeded."}
+                details={"message": "Database initialized, SuperAdmin account seeded."}
             )
             session.add(audit)
 
             await session.commit()
-            logger.info("Default administrator successfully created.")
+            logger.info("Default SuperAdmin successfully created.")
         else:
-            logger.info("Administrator account already exists.")
+            if admin_user.role != "superadmin" and admin_user.email == settings.ADMIN_EMAIL:
+                admin_user.role = "superadmin"
+                await session.commit()
+                logger.info("Updated %s to role 'superadmin'.", settings.ADMIN_EMAIL)
+            else:
+                logger.info("SuperAdmin account '%s' is active with role '%s'.", admin_user.email, admin_user.role)

@@ -19,6 +19,8 @@ class RunBacktestRequest(BaseModel):
     strategy_id: str
     symbol: str = "NIFTY"
     timeframe: str = "1d"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
     initial_capital: float = 500000.0
     lot_size: int = 1
     num_lots: int = 1
@@ -75,6 +77,8 @@ async def run_backtest(
             slippage_pct=req.slippage_pct,
             brokerage_per_order=req.brokerage_per_order,
             segment=req.segment,
+            start_date=req.start_date,
+            end_date=req.end_date,
             parameters=req.parameters
         )
 

@@ -22,26 +22,30 @@ async def test_kotak_adapter_trading_enabled_safety_guardrail():
     Ensures that when TRADING_ENABLED=False (default V1 state),
     KotakNeoAdapter strictly rejects any order placement attempt.
     """
-    adapter = KotakNeoAdapter()
-    req = OrderRequest(
-        symbol="RELIANCE",
-        exchange="NSE",
-        transaction_type="BUY",
-        order_type="MARKET",
-        product="CNC",
-        quantity=10
-    )
+    orig = settings.TRADING_ENABLED
+    try:
+        settings.TRADING_ENABLED = False
+        adapter = KotakNeoAdapter()
+        req = OrderRequest(
+            symbol="RELIANCE",
+            exchange="NSE",
+            transaction_type="BUY",
+            order_type="MARKET",
+            product="CNC",
+            quantity=10
+        )
 
-    # settings.TRADING_ENABLED is False by default
-    result = await adapter.place_order(req)
-    assert result.success is False
-    assert result.status == "REJECTED_SAFETY_CONTROL"
-    assert "safety guardrail" in result.message.lower()
+        result = await adapter.place_order(req)
+        assert result.success is False
+        assert result.status == "REJECTED_SAFETY_CONTROL"
+        assert "safety guardrail" in result.message.lower()
 
-    mod_res = await adapter.modify_order("ORD_123", quantity=20)
-    assert mod_res.success is False
-    assert mod_res.status == "REJECTED_SAFETY_CONTROL"
+        mod_res = await adapter.modify_order("ORD_123", quantity=20)
+        assert mod_res.success is False
+        assert mod_res.status == "REJECTED_SAFETY_CONTROL"
 
-    cancel_res = await adapter.cancel_order("ORD_123")
-    assert cancel_res.success is False
-    assert cancel_res.status == "REJECTED_SAFETY_CONTROL"
+        cancel_res = await adapter.cancel_order("ORD_123")
+        assert cancel_res.success is False
+        assert cancel_res.status == "REJECTED_SAFETY_CONTROL"
+    finally:
+        settings.TRADING_ENABLED = orig

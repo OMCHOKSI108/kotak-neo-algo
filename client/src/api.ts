@@ -4,7 +4,7 @@ import {
   AdminUserItem, AuditLogItem, SanitizedBrokerConnectResponse,
   UserTradingSettings, StrategyItem, TraderOrderRequest,
   TraderOrderResponse, TraderPositionsSummary, TraderOrderItem,
-  AnalyticsSummary
+  AnalyticsSummary, SymbolSearchResult
 } from './types';
 
 const API_BASE = '/api';
@@ -69,6 +69,12 @@ export const api = {
   getOptionChain: (underlying: string, expiry?: string): Promise<OptionChain> => {
     let url = `/market/option-chain?underlying=${encodeURIComponent(underlying)}`;
     if (expiry) url += `&expiry=${encodeURIComponent(expiry)}`;
+    return request(url);
+  },
+
+  searchSymbols: (query: string, exchange?: string): Promise<SymbolSearchResult[]> => {
+    let url = `/market/search?query=${encodeURIComponent(query)}`;
+    if (exchange) url += `&exchange=${encodeURIComponent(exchange)}`;
     return request(url);
   },
 

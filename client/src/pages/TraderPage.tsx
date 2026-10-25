@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { User, BrokerAccount, UserTradingSettings, TraderOrderRequest } from '../types';
+import { User, BrokerAccount, UserTradingSettings, TraderOrderRequest, BrokerProfile } from '../types';
 import { api } from '../api';
 import {
   Zap, ShieldAlert, AlertTriangle, CheckCircle2,
-  RefreshCw, Lock, ArrowRight, Settings2, Sliders
+  RefreshCw, Lock, ArrowRight, Settings2, Sliders, Wallet
 } from 'lucide-react';
 
 interface TraderPageProps {
@@ -11,6 +11,8 @@ interface TraderPageProps {
   initialSymbol?: string;
   initialDetails?: any;
   onNavigate: (tab: string) => void;
+  tradingMode?: 'PAPER' | 'LIVE';
+  onModeChange?: (m: 'PAPER' | 'LIVE') => void;
 }
 
 export const TraderPage: React.FC<TraderPageProps> = ({
@@ -18,8 +20,11 @@ export const TraderPage: React.FC<TraderPageProps> = ({
   initialSymbol = 'NIFTY',
   initialDetails,
   onNavigate,
+  tradingMode = 'PAPER',
+  onModeChange,
 }) => {
   const [brokerAccounts, setBrokerAccounts] = useState<BrokerAccount[]>([]);
+  const [profile, setProfile] = useState<BrokerProfile | null>(null);
   const [settings, setSettings] = useState<UserTradingSettings | null>(null);
   const [lotSizes, setLotSizes] = useState<Record<string, number>>({ NIFTY: 65, BANKNIFTY: 30, SENSEX: 20 });
   const [loading, setLoading] = useState(true);
@@ -53,14 +58,16 @@ export const TraderPage: React.FC<TraderPageProps> = ({
     let isMounted = true;
     async function loadData() {
       try {
-        const [accs, s, lots] = await Promise.all([
+        const [accs, s, lots, prof] = await Promise.all([
           api.getBrokerAccounts().catch(() => []),
           api.getTraderSettings().catch(() => null),
           api.getLotSizes().catch(() => ({ NIFTY: 65, BANKNIFTY: 30, SENSEX: 20 })),
+          api.getBrokerProfile().catch(() => null),
         ]);
 
         if (isMounted) {
           setBrokerAccounts(accs);
+          if (prof) setProfile(prof);
           if (s) {
             setSettings(s);
             setNiftyLots(s.nifty_lots);
@@ -105,6 +112,12 @@ export const TraderPage: React.FC<TraderPageProps> = ({
     }
   };
 
+  useEffect(() => {
+    if (tradingMode && settings && settings.trading_mode !== tradingMode) {
+      setSettings(prev => prev ? ({ ...prev, trading_mode: tradingMode }) : null);
+    }
+  }, [tradingMode]);
+
   const handleToggleMode = async (targetMode: 'PAPER' | 'LIVE') => {
     if (targetMode === 'LIVE' && !settings?.live_trading_enabled) {
       setErrorToast('Please check "Enable Live Execution" before switching to LIVE trading.');
@@ -115,6 +128,7 @@ export const TraderPage: React.FC<TraderPageProps> = ({
         trading_mode: targetMode,
       });
       setSettings(updated);
+      onModeChange?.(targetMode);
       setSuccessToast(`Switched active mode to ${targetMode} TRADING.`);
       setTimeout(() => setSuccessToast(null), 4000);
     } catch (err: any) {
@@ -567,14 +581,23 @@ export const TraderPage: React.FC<TraderPageProps> = ({
               </div>
 
               {/* Order Calculation Preview Card */}
-              <div className="bg-gray-50 p-3.5 rounded-lg border border-gray-200/80 text-xs">
+              <div className="bg-gray-50 p-3.5 rounded-lg border border-gray-200/80 text-xs space-y-1.5">
+                <div className="flex items-center justify-between text-gray-600">
+                  <span className="flex items-center gap-1">
+                    <Wallet className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Available Broker Margin:</span>
+                  </span>
+                  <span className="font-mono font-bold text-emerald-700">
+                    ₹{profile ? profile.available_margin.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+                  </span>
+                </div>
                 <div className="flex items-center justify-between text-gray-600">
                   <span>Unit Quantity:</span>
                   <span className="font-mono font-bold text-gray-900">
                     {orderLots} lot(s) × {currentInstLotSize} = {totalOrderQty} units
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-gray-600 mt-1.5">
+                <div className="flex items-center justify-between text-gray-600">
                   <span>Estimated Total Value:</span>
                   <span className="font-mono font-bold text-blue-700 text-sm">
                     ₹{estimatedOrderValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}

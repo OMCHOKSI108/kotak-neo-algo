@@ -10,7 +10,7 @@ from app.db.session import get_db
 from app.models.models import User, BrokerAccount, AuditLog, UserTradingSettings, Strategy
 from app.core.security import get_password_hash, mask_secret
 from app.security.encryption import encrypt_secret, mask_identifier
-from app.api.deps import get_current_admin
+from app.api.deps import get_current_admin, get_current_superadmin
 
 router = APIRouter(prefix="/admin", tags=["Administrator"])
 
@@ -19,7 +19,7 @@ class CreateUserRequest(BaseModel):
     email: str
     password: str
     full_name: str
-    role: str = "user"  # "admin" or "user"
+    role: str = "user"  # "superadmin" or "user"
     configure_broker: Optional[bool] = False
     broker: Optional[str] = "KOTAK_NEO"
     consumer_key: Optional[str] = None
@@ -144,11 +144,12 @@ async def create_user(
             detail=f"User with email '{email_clean}' already exists."
         )
 
+    role_clean = req.role.lower().strip()
     new_user = User(
         email=email_clean,
         hashed_password=get_password_hash(req.password),
         full_name=req.full_name.strip(),
-        role=req.role if req.role in ["admin", "user"] else "user",
+        role="superadmin" if role_clean in ["superadmin", "admin"] else "user",
         is_active=True
     )
     db.add(new_user)

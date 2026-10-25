@@ -185,12 +185,14 @@ export const AdminDashboard: React.FC = () => {
                   <td className="py-3 px-4">
                     <span
                       className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                        u.role === 'admin'
+                        u.role === 'superadmin'
                           ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                          : u.role === 'admin'
+                          ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
                           : 'bg-blue-50 text-blue-700 border border-blue-200'
                       }`}
                     >
-                      {u.role === 'admin' ? 'Admin' : 'Trader'}
+                      {u.role === 'superadmin' ? 'Super Admin' : u.role === 'admin' ? 'Admin' : 'User'}
                     </span>
                   </td>
 

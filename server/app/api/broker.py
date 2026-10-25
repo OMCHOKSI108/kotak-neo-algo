@@ -548,9 +548,51 @@ async def admin_disconnect_broker(
 
 @router.get("/brokers/profile", response_model=BrokerProfile)
 @router.get("/broker/profile", response_model=BrokerProfile)
-async def get_broker_profile(user: User = Depends(get_current_user)):
-    """Fetch trading account profile, margin, and funds from active adapter."""
-    return await market_service.adapter.get_profile()
+async def get_broker_profile(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user)
+):
+    """Fetch trading account profile, live margin, and funds from active broker adapter."""
+    # Check if this user has an active connected broker account in DB
+    stmt = select(BrokerAccount).where(
+        BrokerAccount.user_id == user.id,
+        BrokerAccount.is_connected == True
+    )
+    result = await db.execute(stmt)
+    acc = result.scalar_one_or_none()
+
+    adapter = None
+    if acc:
+        try:
+            creds = {
+                "consumer_key": decrypt_secret(acc.encrypted_consumer_key) if acc.encrypted_consumer_key else None,
+                "mobile_number": decrypt_secret(acc.encrypted_mobile_number) if acc.encrypted_mobile_number else None,
+                "ucc": decrypt_secret(acc.encrypted_ucc) if acc.encrypted_ucc else None,
+                "mpin": decrypt_secret(acc.encrypted_mpin) if acc.encrypted_mpin else None,
+                "totp_secret": decrypt_secret(acc.encrypted_totp_secret) if acc.encrypted_totp_secret else None,
+                "environment": (acc.session_metadata or {}).get("environment", "prod"),
+            }
+            adapter = get_broker_adapter(acc.broker, account_id=user.id, credentials=creds)
+        except Exception as e:
+            logger.warning("Could not get user adapter for profile: %s", e)
+
+    if not adapter:
+        adapter = market_service.adapter
+
+    profile = await adapter.get_profile()
+
+    # Sync fresh margin and timestamp to BrokerAccount record
+    if acc:
+        meta = dict(acc.session_metadata or {})
+        meta["available_margin"] = profile.available_margin
+        meta["used_margin"] = profile.used_margin
+        meta["collateral"] = profile.collateral
+        meta["cash"] = profile.cash
+        meta["last_margin_sync"] = datetime.now(timezone.utc).isoformat()
+        acc.session_metadata = meta
+        await db.commit()
+
+    return profile
 
 
 @router.get("/brokers/positions", response_model=List[Position])

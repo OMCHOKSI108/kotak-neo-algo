@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { User } from '../types';
+import { KotakNeoLogo } from './KotakNeoLogo';
 import {
   TrendingUp, Activity, Layers, BarChart2, Settings,
   ShieldCheck, UserPlus, LogOut, ChevronDown, Menu, X,
@@ -12,6 +13,7 @@ interface NavbarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   isWsConnected: boolean;
+  isBrokerConnected: boolean;
   onOpenCreateUser?: () => void;
 }
 
@@ -21,12 +23,13 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
   isWsConnected,
+  isBrokerConnected,
   onOpenCreateUser,
 }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const isAdmin = user.role === 'admin';
+  const isSuperAdmin = user.role === 'superadmin' || user.role === 'admin';
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -51,7 +54,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   // Role-based navigation tabs
-  const adminNavItems = [
+  const superAdminNavItems = [
     { id: 'market', label: 'Markets', icon: Activity },
     { id: 'option-chain', label: 'Option Chain', icon: Layers },
     { id: 'strategies', label: 'Strategies', icon: Cpu },
@@ -61,20 +64,16 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'broker', label: 'Brokers', icon: Settings },
   ];
 
-  const traderNavItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  const userNavItems = [
     { id: 'market', label: 'Markets', icon: Activity },
     { id: 'option-chain', label: 'Option Chain', icon: Layers },
     { id: 'strategies', label: 'Strategies', icon: Cpu },
-    { id: 'trader', label: 'Trader', icon: Terminal },
     { id: 'orders', label: 'Orders', icon: FileText },
     { id: 'positions', label: 'Positions', icon: Briefcase },
-    { id: 'analytics', label: 'Analytics', icon: TrendingUp },
-    { id: 'backtest', label: 'Backtest', icon: BarChart2 },
-    { id: 'broker', label: 'Brokers', icon: Settings },
+    { id: 'broker', label: 'Broker API', icon: Settings },
   ];
 
-  const navItems = isAdmin ? adminNavItems : traderNavItems;
+  const navItems = isSuperAdmin ? superAdminNavItems : userNavItems;
 
   const handleTabClick = (tabId: string) => {
     setActiveTab(tabId);
@@ -88,20 +87,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Left: Brand Logo & Title */}
           <div className="flex items-center space-x-3 shrink-0">
             <button
-              onClick={() => handleTabClick(isAdmin ? 'market' : 'dashboard')}
-              className="flex items-center space-x-2.5 focus:outline-none text-left"
+              onClick={() => handleTabClick(isSuperAdmin ? 'dashboard' : 'dashboard')}
+              className="focus:outline-none text-left cursor-pointer transition-opacity hover:opacity-95"
             >
-              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-2xs">
-                <TrendingUp className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="text-sm font-bold tracking-tight text-gray-900 block leading-tight">
-                  NeoAlgo
-                </span>
-                <span className="text-[10px] text-gray-500 font-medium block leading-none">
-                  Trading Terminal
-                </span>
-              </div>
+              <KotakNeoLogo size="sm" />
             </button>
           </div>
 
@@ -131,19 +120,41 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center space-x-2.5 shrink-0">
             {/* Live Feed Pill Indicator */}
             <div
-              className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-gray-50 border border-gray-200 text-gray-600"
-              title={isWsConnected ? 'Market feed active (NSE WebSocket)' : 'Market feed disconnected'}
+              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
+                isWsConnected && isBrokerConnected
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                  : isWsConnected
+                  ? 'bg-amber-50 border-amber-200 text-amber-700'
+                  : 'bg-gray-50 border-gray-200 text-gray-500'
+              }`}
+              title={
+                isWsConnected && isBrokerConnected
+                  ? 'Live market data from Kotak Neo'
+                  : isWsConnected
+                  ? 'Simulated paper-trading data (broker not connected)'
+                  : 'Market feed disconnected'
+              }
             >
               <span
                 className={`w-2 h-2 rounded-full ${
-                  isWsConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
+                  isWsConnected && isBrokerConnected
+                    ? 'bg-emerald-500 animate-pulse'
+                    : isWsConnected
+                    ? 'bg-amber-400 animate-pulse'
+                    : 'bg-red-500'
                 }`}
               />
-              <span className="hidden sm:inline font-mono">{isWsConnected ? 'Live Feed' : 'Feed Offline'}</span>
+              <span className="hidden sm:inline font-mono">
+                {isWsConnected && isBrokerConnected
+                  ? 'Live'
+                  : isWsConnected
+                  ? 'Paper'
+                  : 'Offline'}
+              </span>
             </div>
 
             {/* Admin Quick Action Button: + Add User */}
-            {isAdmin && onOpenCreateUser && (
+            {isSuperAdmin && onOpenCreateUser && (
               <button
                 onClick={onOpenCreateUser}
                 className="hidden sm:flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors shadow-2xs"
@@ -162,7 +173,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 {/* Initials Avatar */}
                 <div className={`w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-bold text-white ${
-                  isAdmin ? 'bg-purple-600' : 'bg-blue-600'
+                  isSuperAdmin ? 'bg-purple-600' : 'bg-blue-600'
                 }`}>
                   {getInitials(user.full_name, user.email)}
                 </div>
@@ -185,18 +196,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <p className="text-gray-500 font-mono text-[11px] truncate mt-0.5">{user.email}</p>
                     <div className="mt-2 flex items-center space-x-2">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                        isAdmin
+                        isSuperAdmin
                           ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                          : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-blue-50 text-blue-700 border border-blue-200'
                       }`}>
-                        {isAdmin ? 'Administrator' : 'Trader Account'}
+                        {isSuperAdmin ? 'Super Admin' : 'Trader / User'}
                       </span>
                     </div>
                   </div>
 
                   {/* Menu Options */}
                   <div className="py-1">
-                    {isAdmin ? (
+                    {isSuperAdmin ? (
                       <>
                         <button
                           onClick={() => {
@@ -206,7 +217,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                           className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 font-medium flex items-center space-x-2"
                         >
                           <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
-                          <span>User Management</span>
+                          <span>User Management (RBAC)</span>
                         </button>
 
                         {onOpenCreateUser && (
@@ -218,7 +229,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                             className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 font-medium flex items-center space-x-2"
                           >
                             <UserPlus className="w-3.5 h-3.5 text-blue-600" />
-                            <span>Create New User</span>
+                            <span>Create New User / Admin</span>
                           </button>
                         )}
                       </>
@@ -227,12 +238,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <button
                           onClick={() => {
                             setDropdownOpen(false);
-                            setActiveTab('trader');
+                            setActiveTab('strategies');
                           }}
                           className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 font-medium flex items-center space-x-2"
                         >
-                          <Terminal className="w-3.5 h-3.5 text-blue-600" />
-                          <span>Trader Terminal</span>
+                          <Cpu className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Trading Strategies</span>
                         </button>
 
                         <button

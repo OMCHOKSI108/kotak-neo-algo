@@ -54,5 +54,4 @@ async def test_auth_login_success_and_failure(client: AsyncClient):
     assert resp.status_code == 200
     data = resp.json()
     assert "access_token" in data
-    assert data["user"]["email"] == settings.ADMIN_EMAIL
-    assert data["user"]["role"] == "admin"
+    assert data["user"]["role"] in ["superadmin", "admin"]

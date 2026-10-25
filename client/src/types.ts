@@ -1,8 +1,10 @@
+export type UserRole = 'superadmin' | 'user' | 'admin';
+
 export interface User {
   id: number;
   email: string;
   full_name: string;
-  role: 'admin' | 'user';
+  role: UserRole;
   is_active: boolean;
 }
 
@@ -29,6 +31,18 @@ export interface Quote {
   bid?: number;
   ask?: number;
   open_interest?: number;
+}
+
+export interface SymbolSearchResult {
+  symbol: string;
+  name: string;
+  exchange: 'NSE' | 'BSE' | string;
+  segment: string;
+  lot_size: number;
+  instrument_type: string;
+  token?: string;
+  tick_size?: number;
+  base_price?: number;
 }
 
 export interface OptionContract {
@@ -93,6 +107,8 @@ export interface BrokerProfile {
   email?: string;
   available_margin: number;
   used_margin: number;
+  collateral?: number;
+  cash?: number;
   is_live: boolean;
 }
 
@@ -156,6 +172,19 @@ export interface BacktestMetrics {
   max_consecutive_losses: number;
 }
 
+export interface BacktestDailyPnL {
+  date: string;
+  pnl: number;
+  trades: number;
+}
+
+export interface BacktestMonthlyPnL {
+  month: string;
+  pnl: number;
+  trades: number;
+  win_rate: number;
+}
+
 export interface BacktestReport {
   run_id?: number;
   strategy_id: string;
@@ -168,6 +197,8 @@ export interface BacktestReport {
   metrics: BacktestMetrics;
   trades: TradeRecord[];
   equity_curve: EquityPoint[];
+  daily_pnl?: BacktestDailyPnL[];
+  monthly_pnl?: BacktestMonthlyPnL[];
 }
 
 export interface AdminUserItem {

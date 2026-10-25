@@ -38,6 +38,8 @@ client/build/
 *.sqlite3
 *.db
 *.log
+logs/
+server/logs/
 local_data/
 server/data/uploads/
 

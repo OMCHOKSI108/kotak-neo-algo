@@ -67,6 +67,8 @@ class BrokerProfile(BaseModel):
     email: Optional[str] = None
     available_margin: float = 0.0
     used_margin: float = 0.0
+    collateral: float = 0.0
+    cash: float = 0.0
     is_live: bool = False
 
 
@@ -108,6 +110,9 @@ class OrderRequest(BaseModel):
     quantity: int
     price: Optional[float] = 0.0
     trigger_price: Optional[float] = 0.0
+    stop_loss: Optional[float] = None
+    target: Optional[float] = None
+    tag: Optional[str] = "NEO_ALGO"
 
 
 class OrderResult(BaseModel):

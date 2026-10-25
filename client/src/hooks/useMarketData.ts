@@ -69,7 +69,9 @@ export function useMarketData() {
     };
 
     ws.onerror = () => {
-      ws.close();
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
     };
   }, []);
 
@@ -77,7 +79,20 @@ export function useMarketData() {
     connect();
     return () => {
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      if (wsRef.current) wsRef.current.close();
+      if (wsRef.current) {
+        const ws = wsRef.current;
+        ws.onclose = null;
+        ws.onerror = null;
+        ws.onmessage = null;
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close(1000, 'Unmounted');
+        } else if (ws.readyState === WebSocket.CONNECTING) {
+          ws.onopen = () => {
+            ws.close(1000, 'Unmounted');
+          };
+        }
+        wsRef.current = null;
+      }
     };
   }, [connect]);
 

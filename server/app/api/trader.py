@@ -14,6 +14,9 @@ from app.models.models import (
 from app.api.deps import get_current_user
 from app.market.service import market_service
 from app.core.config import settings
+from app.broker.schemas import OrderRequest
+from app.security.encryption import decrypt_secret
+from app.broker.factory import get_broker_adapter
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/trader", tags=["Trader & Risk"])
@@ -158,6 +161,8 @@ async def update_trader_settings(
 ):
     """Update lot counts and risk parameters."""
     s = await get_or_create_user_settings(user.id, db)
+    if payload.live_trading_enabled is not None:
+        s.live_trading_enabled = payload.live_trading_enabled
     if payload.trading_mode is not None:
         if payload.trading_mode == "LIVE" and not s.live_trading_enabled:
             raise HTTPException(
@@ -165,8 +170,6 @@ async def update_trader_settings(
                 detail="Cannot switch to LIVE mode without enabling live trading."
             )
         s.trading_mode = payload.trading_mode
-    if payload.live_trading_enabled is not None:
-        s.live_trading_enabled = payload.live_trading_enabled
     if payload.nifty_lots is not None:
         s.nifty_lots = payload.nifty_lots
     if payload.banknifty_lots is not None:
@@ -249,8 +252,31 @@ async def place_trader_order(
                 detail="User account has not enabled Live Trading mode."
             )
 
+        # Resolve active broker adapter (prefer user's connected BrokerAccount)
+        stmt = select(BrokerAccount).where(
+            BrokerAccount.user_id == user.id,
+            BrokerAccount.is_connected == True
+        )
+        res = await db.execute(stmt)
+        user_broker_acc = res.scalar_one_or_none()
+
+        active_adapter = market_service.adapter
+        if user_broker_acc:
+            try:
+                creds = {
+                    "consumer_key": decrypt_secret(user_broker_acc.encrypted_consumer_key) if user_broker_acc.encrypted_consumer_key else None,
+                    "mobile_number": decrypt_secret(user_broker_acc.encrypted_mobile_number) if user_broker_acc.encrypted_mobile_number else None,
+                    "ucc": decrypt_secret(user_broker_acc.encrypted_ucc) if user_broker_acc.encrypted_ucc else None,
+                    "mpin": decrypt_secret(user_broker_acc.encrypted_mpin) if user_broker_acc.encrypted_mpin else None,
+                    "totp_secret": decrypt_secret(user_broker_acc.encrypted_totp_secret) if user_broker_acc.encrypted_totp_secret else None,
+                    "environment": (user_broker_acc.session_metadata or {}).get("environment", "prod"),
+                }
+                active_adapter = get_broker_adapter(user_broker_acc.broker, account_id=user.id, credentials=creds)
+            except Exception as e:
+                logger.warning("Could not get user-specific broker adapter for order: %s", e)
+
         # Execute via active broker adapter
-        broker_res = await market_service.adapter.place_order(
+        broker_res = await active_adapter.place_order(
             OrderRequest(
                 symbol=req.symbol,
                 exchange=req.exchange,
@@ -259,7 +285,9 @@ async def place_trader_order(
                 product=req.product,
                 quantity=qty,
                 price=req.price or 0.0,
-                trigger_price=req.stop_loss
+                trigger_price=req.stop_loss,
+                stop_loss=req.stop_loss,
+                target=req.target
             )
         )
 

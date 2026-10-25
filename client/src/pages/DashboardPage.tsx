@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Quote, User, BrokerAccount, UserTradingSettings, StrategyItem, TraderPositionsSummary } from '../types';
+import { Quote, User, BrokerAccount, UserTradingSettings, StrategyItem, TraderPositionsSummary, BrokerProfile } from '../types';
 import { api } from '../api';
 import {
   TrendingUp, TrendingDown, Activity, ShieldAlert, Cpu, Zap,
-  Layers, ArrowUpRight, CheckCircle2, XCircle, AlertTriangle
+  Layers, ArrowUpRight, CheckCircle2, XCircle, AlertTriangle, Wallet
 } from 'lucide-react';
 
 interface DashboardPageProps {
@@ -20,6 +20,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onNavigate,
 }) => {
   const [brokerAccounts, setBrokerAccounts] = useState<BrokerAccount[]>([]);
+  const [brokerProfile, setBrokerProfile] = useState<BrokerProfile | null>(null);
   const [tradingSettings, setTradingSettings] = useState<UserTradingSettings | null>(null);
   const [strategies, setStrategies] = useState<StrategyItem[]>([]);
   const [positionsSummary, setPositionsSummary] = useState<TraderPositionsSummary | null>(null);
@@ -30,16 +31,18 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     let isMounted = true;
     async function loadData() {
       try {
-        const [accounts, settings, strats, pos, orders] = await Promise.all([
+        const [accounts, settings, strats, pos, orders, prof] = await Promise.all([
           api.getBrokerAccounts().catch(() => []),
           api.getTraderSettings().catch(() => null),
           api.getUserStrategies().catch(() => []),
           api.getTraderPositions().catch(() => null),
-          api.getTraderOrders().catch(() => [])
+          api.getTraderOrders().catch(() => []),
+          api.getBrokerProfile().catch(() => null)
         ]);
 
         if (isMounted) {
           setBrokerAccounts(accounts);
+          if (prof) setBrokerProfile(prof);
           setTradingSettings(settings);
           setStrategies(strats);
           setPositionsSummary(pos);
@@ -221,13 +224,23 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         </div>
 
         {/* Real Summary Metrics Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 py-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 py-4">
           <div className="bg-gray-50/80 rounded-lg p-3 border border-gray-100">
             <span className="text-[10px] uppercase font-bold text-gray-500">Today's P&L</span>
             <div className={`text-base font-bold font-mono mt-1 ${
               (positionsSummary?.total_pnl || 0) >= 0 ? 'text-emerald-600' : 'text-red-600'
             }`}>
               ₹{(positionsSummary?.total_pnl || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            </div>
+          </div>
+
+          <div className="bg-gray-50/80 rounded-lg p-3 border border-gray-100">
+            <span className="text-[10px] uppercase font-bold text-gray-500 flex items-center justify-between">
+              <span>Available Margin</span>
+              <Wallet className="w-3 h-3 text-emerald-600" />
+            </span>
+            <div className="text-base font-bold font-mono text-emerald-700 mt-1">
+              ₹{(brokerProfile?.available_margin ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
           </div>
 

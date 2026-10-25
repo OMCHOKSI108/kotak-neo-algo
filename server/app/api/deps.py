@@ -52,17 +52,30 @@ async def get_current_user(
     return user
 
 
-async def get_current_admin(
+async def get_current_superadmin(
     current_user: User = Depends(get_current_user)
 ) -> User:
-    """Enforce Administrator role."""
-    if current_user.role != "admin":
+    """Enforce SuperAdmin privileges."""
+    if current_user.role not in ["superadmin", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Administrator privileges required"
+            detail="SuperAdmin privileges required"
         )
     return current_user
 
 
+async def get_current_admin(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    """Enforce Administrator / SuperAdmin role."""
+    if current_user.role not in ["superadmin", "admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrative privileges required"
+        )
+    return current_user
+
+
+require_superadmin = get_current_superadmin
 require_admin = get_current_admin
 

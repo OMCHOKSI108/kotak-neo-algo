@@ -22,7 +22,7 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'user' | 'admin'>('user');
+  const [role, setRole] = useState<'user' | 'superadmin'>('user');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -286,7 +286,7 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({
 
                   <label
                     className={`flex items-center space-x-2 p-2.5 rounded-lg border cursor-pointer text-xs transition-colors ${
-                      role === 'admin'
+                      role === 'superadmin'
                         ? 'bg-purple-50 border-purple-500 text-purple-900 font-bold'
                         : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
                     }`}
@@ -294,13 +294,13 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({
                     <input
                       type="radio"
                       name="role"
-                      value="admin"
-                      checked={role === 'admin'}
-                      onChange={() => setRole('admin')}
+                      value="superadmin"
+                      checked={role === 'superadmin'}
+                      onChange={() => setRole('superadmin')}
                       className="sr-only"
                     />
                     <Shield className="w-4 h-4 text-purple-600" />
-                    <span>Administrator</span>
+                    <span>Super Admin</span>
                   </label>
                 </div>
               </div>

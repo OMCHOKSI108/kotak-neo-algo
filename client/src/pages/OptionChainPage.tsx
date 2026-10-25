@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { OptionChain, OptionStrike, OptionContract } from '../types';
-import { Layers, Calendar, Filter, RefreshCw, AlertCircle, Info, Zap, X } from 'lucide-react';
+import { Layers, Calendar, Filter, RefreshCw, AlertCircle, Info, Zap, X, CheckCircle2 } from 'lucide-react';
+import { OptionTradeModal } from '../components/OptionTradeModal';
 
 interface OptionChainPageProps {
   initialUnderlying?: string;
   onNavigateTrader?: (symbol: string, optionDetails?: any) => void;
+  tradingMode?: 'PAPER' | 'LIVE';
 }
 
 export const OptionChainPage: React.FC<OptionChainPageProps> = ({
   initialUnderlying = 'NIFTY',
   onNavigateTrader,
+  tradingMode = 'PAPER',
 }) => {
   const [underlying, setUnderlying] = useState(initialUnderlying);
   const [chain, setChain] = useState<OptionChain | null>(null);
@@ -23,6 +26,16 @@ export const OptionChainPage: React.FC<OptionChainPageProps> = ({
     type: 'CE' | 'PE';
     strike: number;
   } | null>(null);
+
+  // Dhan-style Quick Trade Ticket State
+  const [activeTradeTicket, setActiveTradeTicket] = useState<{
+    underlying: string;
+    strike: number;
+    type: 'CE' | 'PE';
+    contract: OptionContract;
+    defaultSide: 'BUY' | 'SELL';
+  } | null>(null);
+  const [tradeSuccessToast, setTradeSuccessToast] = useState<string | null>(null);
 
   const supportedUnderlyings = ['NIFTY', 'BANKNIFTY', 'SENSEX'];
 
@@ -78,12 +91,24 @@ export const OptionChainPage: React.FC<OptionChainPageProps> = ({
     }
   }
 
-  const formatNum = (val?: number) => {
-    if (val === undefined || val === null || val === 0) return '-';
+  const formatNum = (val?: number | null) => {
+    if (val === undefined || val === null) return '-';
     return val.toLocaleString('en-IN');
   };
 
-  const formatPrice = (val?: number) => {
+  const formatChgOI = (val?: number | null) => {
+    if (val === undefined || val === null) return '-';
+    if (val === 0) return '0';
+    const sign = val > 0 ? '+' : '';
+    return `${sign}${val.toLocaleString('en-IN')}`;
+  };
+
+  const formatVolume = (val?: number | null) => {
+    if (val === undefined || val === null) return '0';
+    return val.toLocaleString('en-IN');
+  };
+
+  const formatPrice = (val?: number | null) => {
     if (val === undefined || val === null) return '-';
     return val.toFixed(2);
   };
@@ -221,11 +246,11 @@ export const OptionChainPage: React.FC<OptionChainPageProps> = ({
               </tr>
               <tr className="bg-gray-50/50 border-b border-gray-200 text-gray-500 font-medium text-[10px] font-mono">
                 {/* Calls Headers */}
-                <th className="py-2 px-2 text-right">OI</th>
-                <th className="py-2 px-2 text-right">Chg OI</th>
-                <th className="py-2 px-2 text-right">Volume</th>
-                <th className="py-2 px-2 text-right">IV</th>
-                <th className="py-2 px-2 text-right">Bid</th>
+                <th className="py-2 px-2 text-right" title="Open Interest">OI</th>
+                <th className="py-2 px-2 text-right" title="Change in Open Interest">Chg OI</th>
+                <th className="py-2 px-2 text-right" title="Traded Contracts Volume">Volume</th>
+                <th className="py-2 px-2 text-right" title="Implied Volatility (computed via Black-Scholes European model)">IV</th>
+                <th className="py-2 px-2 text-right" title="Best Bid Price (live during market hours)">Bid</th>
                 <th className="py-2 px-3 text-right font-bold text-gray-900 border-r border-gray-200">LTP</th>
 
                 {/* Strike Header */}
@@ -233,11 +258,11 @@ export const OptionChainPage: React.FC<OptionChainPageProps> = ({
 
                 {/* Puts Headers */}
                 <th className="py-2 px-3 text-left font-bold text-gray-900 border-l border-gray-200">LTP</th>
-                <th className="py-2 px-2 text-left">Ask</th>
-                <th className="py-2 px-2 text-left">IV</th>
-                <th className="py-2 px-2 text-left">Volume</th>
-                <th className="py-2 px-2 text-left">Chg OI</th>
-                <th className="py-2 px-2 text-left">OI</th>
+                <th className="py-2 px-2 text-left" title="Best Ask Price (live during market hours)">Ask</th>
+                <th className="py-2 px-2 text-left" title="Implied Volatility (computed via Black-Scholes European model)">IV</th>
+                <th className="py-2 px-2 text-left" title="Traded Contracts Volume">Volume</th>
+                <th className="py-2 px-2 text-left" title="Change in Open Interest">Chg OI</th>
+                <th className="py-2 px-2 text-left" title="Open Interest">OI</th>
               </tr>
             </thead>
 
@@ -276,24 +301,67 @@ export const OptionChainPage: React.FC<OptionChainPageProps> = ({
                       <td className={`py-2 px-2 text-right ${
                         (s.call?.change_oi || 0) >= 0 ? 'text-emerald-600' : 'text-red-600'
                       } ${isCallItm ? 'bg-amber-50/20' : ''}`}>
-                        {(s.call?.change_oi || 0) >= 0 ? '+' : ''}{formatNum(s.call?.change_oi)}
+                        {formatChgOI(s.call?.change_oi)}
                       </td>
                       <td className={`py-2 px-2 text-right text-gray-500 ${isCallItm ? 'bg-amber-50/20' : ''}`}>
-                        {formatNum(s.call?.volume)}
+                        {formatVolume(s.call?.volume)}
                       </td>
-                      <td className={`py-2 px-2 text-right text-gray-400 ${isCallItm ? 'bg-amber-50/20' : ''}`}>
+                      <td className={`py-2 px-2 text-right font-medium text-blue-600 ${isCallItm ? 'bg-amber-50/20' : ''}`}>
                         {s.call?.iv ? `${s.call.iv.toFixed(1)}%` : '-'}
                       </td>
                       <td className={`py-2 px-2 text-right text-gray-500 ${isCallItm ? 'bg-amber-50/20' : ''}`}>
                         {formatPrice(s.call?.bid)}
                       </td>
+                      {/* CALLS LTP WITH DHAN-STYLE BUY/SELL BUTTONS */}
                       <td
-                        onClick={() => s.call && setSelectedContract({ contract: s.call, type: 'CE', strike: s.strike_price })}
-                        className={`py-2 px-3 text-right font-bold cursor-pointer hover:underline text-emerald-700 border-r border-gray-200 ${
+                        className={`py-2 px-2 text-right font-bold text-emerald-700 border-r border-gray-200 group/call relative ${
                           isCallItm ? 'bg-amber-50/30' : ''
                         }`}
                       >
-                        {formatPrice(s.call?.ltp)}
+                        <div className="flex items-center justify-end space-x-1.5">
+                          {s.call && (
+                            <div className="flex items-center space-x-1 sm:opacity-0 group-hover/call:opacity-100 transition-opacity">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveTradeTicket({
+                                    underlying,
+                                    strike: s.strike_price,
+                                    type: 'CE',
+                                    contract: s.call!,
+                                    defaultSide: 'BUY',
+                                  });
+                                }}
+                                className="w-5 h-5 rounded text-[10px] font-extrabold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs flex items-center justify-center transition-transform hover:scale-110"
+                                title={`Buy ${underlying} ${s.strike_price} CE`}
+                              >
+                                B
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveTradeTicket({
+                                    underlying,
+                                    strike: s.strike_price,
+                                    type: 'CE',
+                                    contract: s.call!,
+                                    defaultSide: 'SELL',
+                                  });
+                                }}
+                                className="w-5 h-5 rounded text-[10px] font-extrabold bg-red-600 hover:bg-red-700 text-white shadow-2xs flex items-center justify-center transition-transform hover:scale-110"
+                                title={`Sell ${underlying} ${s.strike_price} CE`}
+                              >
+                                S
+                              </button>
+                            </div>
+                          )}
+                          <span
+                            onClick={() => s.call && setSelectedContract({ contract: s.call, type: 'CE', strike: s.strike_price })}
+                            className="cursor-pointer hover:underline font-mono"
+                          >
+                            {formatPrice(s.call?.ltp)}
+                          </span>
+                        </div>
                       </td>
 
                       {/* STRIKE PRICE */}
@@ -306,28 +374,70 @@ export const OptionChainPage: React.FC<OptionChainPageProps> = ({
                         {isAtm && <span className="ml-1 text-[9px] text-amber-700 font-extrabold uppercase">ATM</span>}
                       </td>
 
-                      {/* PUTS DATA */}
+                      {/* PUTS LTP WITH DHAN-STYLE BUY/SELL BUTTONS */}
                       <td
-                        onClick={() => s.put && setSelectedContract({ contract: s.put, type: 'PE', strike: s.strike_price })}
-                        className={`py-2 px-3 text-left font-bold cursor-pointer hover:underline text-red-700 border-l border-gray-200 ${
+                        className={`py-2 px-2 text-left font-bold text-red-700 border-l border-gray-200 group/put relative ${
                           isPutItm ? 'bg-amber-50/30' : ''
                         }`}
                       >
-                        {formatPrice(s.put?.ltp)}
+                        <div className="flex items-center justify-start space-x-1.5">
+                          <span
+                            onClick={() => s.put && setSelectedContract({ contract: s.put, type: 'PE', strike: s.strike_price })}
+                            className="cursor-pointer hover:underline font-mono"
+                          >
+                            {formatPrice(s.put?.ltp)}
+                          </span>
+                          {s.put && (
+                            <div className="flex items-center space-x-1 sm:opacity-0 group-hover/put:opacity-100 transition-opacity">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveTradeTicket({
+                                    underlying,
+                                    strike: s.strike_price,
+                                    type: 'PE',
+                                    contract: s.put!,
+                                    defaultSide: 'BUY',
+                                  });
+                                }}
+                                className="w-5 h-5 rounded text-[10px] font-extrabold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs flex items-center justify-center transition-transform hover:scale-110"
+                                title={`Buy ${underlying} ${s.strike_price} PE`}
+                              >
+                                B
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveTradeTicket({
+                                    underlying,
+                                    strike: s.strike_price,
+                                    type: 'PE',
+                                    contract: s.put!,
+                                    defaultSide: 'SELL',
+                                  });
+                                }}
+                                className="w-5 h-5 rounded text-[10px] font-extrabold bg-red-600 hover:bg-red-700 text-white shadow-2xs flex items-center justify-center transition-transform hover:scale-110"
+                                title={`Sell ${underlying} ${s.strike_price} PE`}
+                              >
+                                S
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className={`py-2 px-2 text-left text-gray-500 ${isPutItm ? 'bg-amber-50/20' : ''}`}>
                         {formatPrice(s.put?.ask)}
                       </td>
-                      <td className={`py-2 px-2 text-left text-gray-400 ${isPutItm ? 'bg-amber-50/20' : ''}`}>
+                      <td className={`py-2 px-2 text-left font-medium text-blue-600 ${isPutItm ? 'bg-amber-50/20' : ''}`}>
                         {s.put?.iv ? `${s.put.iv.toFixed(1)}%` : '-'}
                       </td>
                       <td className={`py-2 px-2 text-left text-gray-500 ${isPutItm ? 'bg-amber-50/20' : ''}`}>
-                        {formatNum(s.put?.volume)}
+                        {formatVolume(s.put?.volume)}
                       </td>
                       <td className={`py-2 px-2 text-left ${
                         (s.put?.change_oi || 0) >= 0 ? 'text-emerald-600' : 'text-red-600'
                       } ${isPutItm ? 'bg-amber-50/20' : ''}`}>
-                        {(s.put?.change_oi || 0) >= 0 ? '+' : ''}{formatNum(s.put?.change_oi)}
+                        {formatChgOI(s.put?.change_oi)}
                       </td>
                       <td className={`py-2 px-2 text-left text-gray-600 ${isPutItm ? 'bg-amber-50/20' : ''}`}>
                         {formatNum(s.put?.open_interest)}
@@ -338,6 +448,18 @@ export const OptionChainPage: React.FC<OptionChainPageProps> = ({
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Live Data Provenance Info */}
+        <div className="bg-gray-50/80 border-t border-gray-200 px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-gray-500 font-mono gap-1.5">
+          <div className="flex items-center space-x-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className="font-semibold text-gray-700">Kotak Neo Live API:</span>
+            <span>LTP, OI & Change in OI active</span>
+          </div>
+          <div className="text-[10px] text-gray-500">
+            <span>IV: Black-Scholes European model · Bid/Ask: Level-2 live depth during market hours</span>
+          </div>
         </div>
       </div>
 
@@ -427,6 +549,39 @@ export const OptionChainPage: React.FC<OptionChainPageProps> = ({
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Dhan-Style Inline Trade Ticket Modal */}
+      {activeTradeTicket && (
+        <OptionTradeModal
+          isOpen={!!activeTradeTicket}
+          onClose={() => setActiveTradeTicket(null)}
+          underlying={activeTradeTicket.underlying}
+          strike={activeTradeTicket.strike}
+          type={activeTradeTicket.type}
+          contract={activeTradeTicket.contract}
+          defaultSide={activeTradeTicket.defaultSide}
+          lotSize={lotSize}
+          initialMode={tradingMode}
+          onOrderSuccess={(msg) => {
+            setTradeSuccessToast(msg);
+            setTimeout(() => setTradeSuccessToast(null), 5000);
+          }}
+        />
+      )}
+
+      {/* Trade Execution Success Toast */}
+      {tradeSuccessToast && (
+        <div className="fixed bottom-12 right-6 z-50 bg-emerald-900 text-white px-4 py-3 rounded-xl shadow-xl flex items-center space-x-2.5 text-xs font-semibold animate-slide-up border border-emerald-700">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{tradeSuccessToast}</span>
+          <button
+            onClick={() => setTradeSuccessToast(null)}
+            className="text-emerald-300 hover:text-white font-bold ml-2"
+          >
+            ×
+          </button>
         </div>
       )}
     </div>
