@@ -1,21 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
-import { OptionChain, OptionStrike } from '../types';
-import { Layers, Calendar, Filter, RefreshCw, AlertCircle, Info } from 'lucide-react';
+import { OptionChain, OptionStrike, OptionContract } from '../types';
+import { Layers, Calendar, Filter, RefreshCw, AlertCircle, Info, Zap, X } from 'lucide-react';
 
 interface OptionChainPageProps {
   initialUnderlying?: string;
+  onNavigateTrader?: (symbol: string, optionDetails?: any) => void;
 }
 
 export const OptionChainPage: React.FC<OptionChainPageProps> = ({
   initialUnderlying = 'NIFTY',
+  onNavigateTrader,
 }) => {
   const [underlying, setUnderlying] = useState(initialUnderlying);
   const [chain, setChain] = useState<OptionChain | null>(null);
   const [selectedExpiry, setSelectedExpiry] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [strikeFilter, setStrikeFilter] = useState<string>('all'); // all, atm, near
+  const [strikeFilter, setStrikeFilter] = useState<string>('all'); // all, near
+  const [selectedContract, setSelectedContract] = useState<{
+    contract: OptionContract;
+    type: 'CE' | 'PE';
+    strike: number;
+  } | null>(null);
 
   const supportedUnderlyings = ['NIFTY', 'BANKNIFTY', 'SENSEX'];
 
@@ -65,14 +72,14 @@ export const OptionChainPage: React.FC<OptionChainPageProps> = ({
   if (strikeFilter === 'near' && chain) {
     const atmIndex = displayedStrikes.findIndex((s) => s.strike_price === atmStrike);
     if (atmIndex !== -1) {
-      const start = Math.max(0, atmIndex - 5);
-      const end = Math.min(displayedStrikes.length, atmIndex + 6);
+      const start = Math.max(0, atmIndex - 8);
+      const end = Math.min(displayedStrikes.length, atmIndex + 9);
       displayedStrikes = displayedStrikes.slice(start, end);
     }
   }
 
   const formatNum = (val?: number) => {
-    if (val === undefined || val === null) return '-';
+    if (val === undefined || val === null || val === 0) return '-';
     return val.toLocaleString('en-IN');
   };
 
@@ -81,14 +88,16 @@ export const OptionChainPage: React.FC<OptionChainPageProps> = ({
     return val.toFixed(2);
   };
 
+  const lotSize = chain?.lot_size || (underlying === 'BANKNIFTY' ? 30 : underlying === 'SENSEX' ? 20 : 65);
+
   return (
     <div className="space-y-6 font-sans">
       {/* Header & Tabs */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+      <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-2xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           {/* Index Tabs */}
           <div>
-            <span className="text-xs font-bold text-gray-500 uppercase tracking-wider font-mono">
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider font-mono">
               Underlying Index
             </span>
             <div className="flex space-x-2 mt-1">
@@ -99,10 +108,10 @@ export const OptionChainPage: React.FC<OptionChainPageProps> = ({
                     setUnderlying(u);
                     setSelectedExpiry('');
                   }}
-                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
                     underlying === u
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'bg-white text-gray-700 hover:text-black border border-gray-300 hover:bg-gray-50'
+                      ? 'bg-blue-600 text-white shadow-2xs'
+                      : 'bg-white text-gray-700 hover:text-black border border-gray-200 hover:bg-gray-50'
                   }`}
                 >
                   {u}
@@ -111,188 +120,315 @@ export const OptionChainPage: React.FC<OptionChainPageProps> = ({
             </div>
           </div>
 
-          {/* Underling LTP & PCR Stats */}
+          {/* Underlying Spot Price & Stats */}
           {chain && (
-            <div className="flex items-center space-x-6 font-mono text-xs">
-              <div className="border-r border-gray-200 pr-6">
-                <span className="text-gray-500 block">Underlying LTP</span>
-                <span className="text-lg font-extrabold text-black">₹{formatPrice(chain.underlying_ltp)}</span>
-              </div>
-              <div className="border-r border-gray-200 pr-6">
-                <span className="text-gray-500 block">PCR (OI)</span>
-                <span className={`text-lg font-extrabold ${Number(pcr) > 1 ? 'text-emerald-700' : 'text-red-700'}`}>
-                  {pcr}
+            <div className="flex items-center space-x-4 bg-gray-50 border border-gray-100 px-4 py-2 rounded-lg">
+              <div>
+                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">
+                  Underlying Spot
+                </span>
+                <span className="text-base font-bold font-mono text-gray-900">
+                  ₹{chain.underlying_ltp.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
               </div>
+              <div className="h-7 w-[1px] bg-gray-200" />
               <div>
-                <span className="text-gray-500 block">Lot Size</span>
-                <span className="text-lg font-extrabold text-blue-700">{chain.lot_size}</span>
+                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">
+                  Lot Size
+                </span>
+                <span className="text-sm font-bold font-mono text-gray-800">
+                  {lotSize}
+                </span>
+              </div>
+              <div className="h-7 w-[1px] bg-gray-200" />
+              <div>
+                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">
+                  PCR (OI)
+                </span>
+                <span className={`text-sm font-bold font-mono ${parseFloat(pcr) >= 1 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {pcr}
+                </span>
               </div>
             </div>
           )}
 
-          {/* Expiry & Strike Controls */}
-          <div className="flex items-center space-x-3">
-            <div className="flex items-center space-x-2 bg-white border border-gray-300 rounded-lg px-3 py-1.5 shadow-xs">
-              <Calendar className="w-4 h-4 text-gray-500" />
+          {/* Expiry Selector & Filter */}
+          <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-1">
+              <Calendar className="w-3.5 h-3.5 text-gray-400" />
               <select
                 value={selectedExpiry}
                 onChange={(e) => setSelectedExpiry(e.target.value)}
-                className="bg-transparent text-xs text-gray-900 focus:outline-none font-mono font-medium"
+                disabled={loading || !chain || chain.expiries.length === 0}
+                className="bg-white border border-gray-200 text-xs font-semibold text-gray-900 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono shadow-2xs"
               >
                 {chain?.expiries.map((exp) => (
-                  <option key={exp} value={exp} className="bg-white text-gray-900">
+                  <option key={exp} value={exp}>
                     {exp}
                   </option>
                 ))}
               </select>
             </div>
 
+            <div className="flex items-center space-x-1">
+              <Filter className="w-3.5 h-3.5 text-gray-400" />
+              <select
+                value={strikeFilter}
+                onChange={(e) => setStrikeFilter(e.target.value)}
+                className="bg-white border border-gray-200 text-xs font-semibold text-gray-900 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
+              >
+                <option value="all">All Strikes</option>
+                <option value="near">Near ATM (±8)</option>
+              </select>
+            </div>
+
             <button
-              onClick={() => fetchChain(underlying, selectedExpiry)}
+              onClick={() => fetchChain(underlying, selectedExpiry || undefined)}
               disabled={loading}
-              className="p-2 rounded-lg bg-white border border-gray-300 text-gray-600 hover:text-black hover:bg-gray-50 transition-colors shadow-xs"
+              className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600 hover:text-black transition-colors"
               title="Refresh Option Chain"
             >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-600' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
       </div>
 
+      {/* Error Banner */}
       {error && (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold flex items-center space-x-3">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
+        <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl flex items-center space-x-2 text-xs font-semibold shadow-2xs">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       {/* Option Chain Table */}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-2xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-center border-collapse text-xs font-mono">
+          <table className="w-full text-center text-xs">
+            {/* Top Multi-Header */}
             <thead>
-              {/* Top grouping header */}
-              <tr className="border-b border-gray-200 bg-gray-50 text-[11px] font-bold text-gray-700 uppercase tracking-wider">
-                <th colSpan={6} className="py-2.5 px-3 border-r border-gray-200 text-emerald-800">
-                  CALL OPTIONS (CE)
+              <tr className="bg-gray-50/80 border-b border-gray-200 font-mono text-[10px]">
+                <th colSpan={6} className="py-2 text-center text-emerald-800 font-bold border-r border-gray-200 uppercase tracking-widest bg-emerald-50/40">
+                  Calls (CE)
                 </th>
-                <th className="py-2.5 px-4 bg-gray-100 text-black font-extrabold border-r border-l border-gray-200">
-                  STRIKE
+                <th className="py-2 text-center text-gray-900 font-bold uppercase tracking-wider bg-gray-100/70">
+                  Strike
                 </th>
-                <th colSpan={6} className="py-2.5 px-3 border-l border-gray-200 text-red-800">
-                  PUT OPTIONS (PE)
+                <th colSpan={6} className="py-2 text-center text-red-800 font-bold border-l border-gray-200 uppercase tracking-widest bg-red-50/40">
+                  Puts (PE)
                 </th>
               </tr>
-              {/* Column header */}
-              <tr className="border-b border-gray-200 bg-gray-50 text-[10px] text-gray-600 font-bold uppercase">
-                {/* Calls */}
-                <th className="py-2 px-3">OI</th>
-                <th className="py-2 px-3">Chg OI</th>
-                <th className="py-2 px-3">Volume</th>
-                <th className="py-2 px-3">Bid</th>
-                <th className="py-2 px-3">Ask</th>
-                <th className="py-2 px-3 border-r border-gray-200 text-emerald-800 font-bold">LTP</th>
+              <tr className="bg-gray-50/50 border-b border-gray-200 text-gray-500 font-medium text-[10px] font-mono">
+                {/* Calls Headers */}
+                <th className="py-2 px-2 text-right">OI</th>
+                <th className="py-2 px-2 text-right">Chg OI</th>
+                <th className="py-2 px-2 text-right">Volume</th>
+                <th className="py-2 px-2 text-right">IV</th>
+                <th className="py-2 px-2 text-right">Bid</th>
+                <th className="py-2 px-3 text-right font-bold text-gray-900 border-r border-gray-200">LTP</th>
 
-                {/* Strike */}
-                <th className="py-2 px-4 bg-gray-100 text-black font-bold border-r border-l border-gray-200">
-                  Price
-                </th>
+                {/* Strike Header */}
+                <th className="py-2 px-4 text-center font-bold text-gray-900 bg-gray-100/50">Price</th>
 
-                {/* Puts */}
-                <th className="py-2 px-3 border-l border-gray-200 text-red-800 font-bold">LTP</th>
-                <th className="py-2 px-3">Bid</th>
-                <th className="py-2 px-3">Ask</th>
-                <th className="py-2 px-3">Volume</th>
-                <th className="py-2 px-3">Chg OI</th>
-                <th className="py-2 px-3">OI</th>
+                {/* Puts Headers */}
+                <th className="py-2 px-3 text-left font-bold text-gray-900 border-l border-gray-200">LTP</th>
+                <th className="py-2 px-2 text-left">Ask</th>
+                <th className="py-2 px-2 text-left">IV</th>
+                <th className="py-2 px-2 text-left">Volume</th>
+                <th className="py-2 px-2 text-left">Chg OI</th>
+                <th className="py-2 px-2 text-left">OI</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
-              {displayedStrikes.map((s) => {
-                const isATM = s.strike_price === atmStrike;
-                const callITM = s.strike_price < (chain?.underlying_ltp || 0);
-                const putITM = s.strike_price > (chain?.underlying_ltp || 0);
 
-                return (
-                  <tr
-                    key={s.strike_price}
-                    className={`hover:bg-gray-50/80 transition-colors ${
-                      isATM ? 'bg-amber-50/30' : ''
-                    }`}
-                  >
-                    {/* Call Columns */}
-                    <td className={`py-2 px-3 ${callITM ? 'bg-emerald-50/60 font-semibold' : ''} text-gray-700`}>
-                      {formatNum(s.call?.open_interest)}
-                    </td>
-                    <td
-                      className={`py-2 px-3 ${callITM ? 'bg-emerald-50/60' : ''} ${
-                        (s.call?.change_oi || 0) >= 0 ? 'text-emerald-700 font-semibold' : 'text-red-700 font-semibold'
-                      }`}
-                    >
-                      {(s.call?.change_oi || 0) >= 0 ? '+' : ''}{formatNum(s.call?.change_oi)}
-                    </td>
-                    <td className={`py-2 px-3 ${callITM ? 'bg-emerald-50/60' : ''} text-gray-600`}>
-                      {formatNum(s.call?.volume)}
-                    </td>
-                    <td className={`py-2 px-3 ${callITM ? 'bg-emerald-50/60' : ''} text-gray-700`}>
-                      {formatPrice(s.call?.bid)}
-                    </td>
-                    <td className={`py-2 px-3 ${callITM ? 'bg-emerald-50/60' : ''} text-gray-700`}>
-                      {formatPrice(s.call?.ask)}
-                    </td>
-                    <td
-                      className={`py-2 px-3 border-r border-gray-200 font-bold text-gray-900 ${
-                        callITM ? 'bg-emerald-50/80 text-emerald-900' : ''
-                      }`}
-                    >
-                      ₹{formatPrice(s.call?.ltp)}
-                    </td>
+            {/* Table Body */}
+            <tbody className="divide-y divide-gray-100 font-mono text-[11px]">
+              {loading && !chain ? (
+                <tr>
+                  <td colSpan={13} className="py-12 text-center text-gray-400 font-sans">
+                    <RefreshCw className="w-5 h-5 mx-auto animate-spin mb-2" />
+                    Fetching Option Chain from Kotak Neo...
+                  </td>
+                </tr>
+              ) : displayedStrikes.length === 0 ? (
+                <tr>
+                  <td colSpan={13} className="py-12 text-center text-gray-400 font-sans">
+                    No option contracts available for this expiry.
+                  </td>
+                </tr>
+              ) : (
+                displayedStrikes.map((s) => {
+                  const isAtm = s.strike_price === atmStrike;
+                  const isCallItm = chain ? s.strike_price < chain.underlying_ltp : false;
+                  const isPutItm = chain ? s.strike_price > chain.underlying_ltp : false;
 
-                    {/* Strike */}
-                    <td
-                      className={`py-2 px-4 bg-gray-50 text-black font-extrabold border-r border-l border-gray-200 ${
-                        isATM ? 'bg-amber-100 text-amber-950 font-extrabold ring-1 ring-amber-400' : ''
+                  return (
+                    <tr
+                      key={s.strike_price}
+                      className={`hover:bg-blue-50/20 transition-colors ${
+                        isAtm ? 'bg-amber-50/30 font-bold' : ''
                       }`}
                     >
-                      <span>{s.strike_price}</span>
-                      {isATM && <span className="ml-1 text-[9px] px-1 py-0.5 rounded bg-amber-200 text-amber-900 font-bold">ATM</span>}
-                    </td>
+                      {/* CALLS DATA */}
+                      <td className={`py-2 px-2 text-right text-gray-600 ${isCallItm ? 'bg-amber-50/20' : ''}`}>
+                        {formatNum(s.call?.open_interest)}
+                      </td>
+                      <td className={`py-2 px-2 text-right ${
+                        (s.call?.change_oi || 0) >= 0 ? 'text-emerald-600' : 'text-red-600'
+                      } ${isCallItm ? 'bg-amber-50/20' : ''}`}>
+                        {(s.call?.change_oi || 0) >= 0 ? '+' : ''}{formatNum(s.call?.change_oi)}
+                      </td>
+                      <td className={`py-2 px-2 text-right text-gray-500 ${isCallItm ? 'bg-amber-50/20' : ''}`}>
+                        {formatNum(s.call?.volume)}
+                      </td>
+                      <td className={`py-2 px-2 text-right text-gray-400 ${isCallItm ? 'bg-amber-50/20' : ''}`}>
+                        {s.call?.iv ? `${s.call.iv.toFixed(1)}%` : '-'}
+                      </td>
+                      <td className={`py-2 px-2 text-right text-gray-500 ${isCallItm ? 'bg-amber-50/20' : ''}`}>
+                        {formatPrice(s.call?.bid)}
+                      </td>
+                      <td
+                        onClick={() => s.call && setSelectedContract({ contract: s.call, type: 'CE', strike: s.strike_price })}
+                        className={`py-2 px-3 text-right font-bold cursor-pointer hover:underline text-emerald-700 border-r border-gray-200 ${
+                          isCallItm ? 'bg-amber-50/30' : ''
+                        }`}
+                      >
+                        {formatPrice(s.call?.ltp)}
+                      </td>
 
-                    {/* Put Columns */}
-                    <td
-                      className={`py-2 px-3 border-l border-gray-200 font-bold text-gray-900 ${
-                        putITM ? 'bg-red-50/80 text-red-900' : ''
-                      }`}
-                    >
-                      ₹{formatPrice(s.put?.ltp)}
-                    </td>
-                    <td className={`py-2 px-3 ${putITM ? 'bg-red-50/60' : ''} text-gray-700`}>
-                      {formatPrice(s.put?.bid)}
-                    </td>
-                    <td className={`py-2 px-3 ${putITM ? 'bg-red-50/60' : ''} text-gray-700`}>
-                      {formatPrice(s.put?.ask)}
-                    </td>
-                    <td className={`py-2 px-3 ${putITM ? 'bg-red-50/60' : ''} text-gray-600`}>
-                      {formatNum(s.put?.volume)}
-                    </td>
-                    <td
-                      className={`py-2 px-3 ${putITM ? 'bg-red-50/60' : ''} ${
-                        (s.put?.change_oi || 0) >= 0 ? 'text-emerald-700 font-semibold' : 'text-red-700 font-semibold'
-                      }`}
-                    >
-                      {(s.put?.change_oi || 0) >= 0 ? '+' : ''}{formatNum(s.put?.change_oi)}
-                    </td>
-                    <td className={`py-2 px-3 ${putITM ? 'bg-red-50/60 font-semibold' : ''} text-gray-700`}>
-                      {formatNum(s.put?.open_interest)}
-                    </td>
-                  </tr>
-                );
-              })}
+                      {/* STRIKE PRICE */}
+                      <td className={`py-2 px-4 font-bold text-center ${
+                        isAtm
+                          ? 'bg-amber-100 text-amber-900 ring-1 ring-amber-300'
+                          : 'bg-gray-100/60 text-gray-900'
+                      }`}>
+                        {s.strike_price.toLocaleString('en-IN', { minimumFractionDigits: 1 })}
+                        {isAtm && <span className="ml-1 text-[9px] text-amber-700 font-extrabold uppercase">ATM</span>}
+                      </td>
+
+                      {/* PUTS DATA */}
+                      <td
+                        onClick={() => s.put && setSelectedContract({ contract: s.put, type: 'PE', strike: s.strike_price })}
+                        className={`py-2 px-3 text-left font-bold cursor-pointer hover:underline text-red-700 border-l border-gray-200 ${
+                          isPutItm ? 'bg-amber-50/30' : ''
+                        }`}
+                      >
+                        {formatPrice(s.put?.ltp)}
+                      </td>
+                      <td className={`py-2 px-2 text-left text-gray-500 ${isPutItm ? 'bg-amber-50/20' : ''}`}>
+                        {formatPrice(s.put?.ask)}
+                      </td>
+                      <td className={`py-2 px-2 text-left text-gray-400 ${isPutItm ? 'bg-amber-50/20' : ''}`}>
+                        {s.put?.iv ? `${s.put.iv.toFixed(1)}%` : '-'}
+                      </td>
+                      <td className={`py-2 px-2 text-left text-gray-500 ${isPutItm ? 'bg-amber-50/20' : ''}`}>
+                        {formatNum(s.put?.volume)}
+                      </td>
+                      <td className={`py-2 px-2 text-left ${
+                        (s.put?.change_oi || 0) >= 0 ? 'text-emerald-600' : 'text-red-600'
+                      } ${isPutItm ? 'bg-amber-50/20' : ''}`}>
+                        {(s.put?.change_oi || 0) >= 0 ? '+' : ''}{formatNum(s.put?.change_oi)}
+                      </td>
+                      <td className={`py-2 px-2 text-left text-gray-600 ${isPutItm ? 'bg-amber-50/20' : ''}`}>
+                        {formatNum(s.put?.open_interest)}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Selected Option Details Modal / Drawer */}
+      {selectedContract && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-2xs p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-5 shadow-xl border border-gray-200 animate-scale-in">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+              <div className="flex items-center space-x-2">
+                <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                  selectedContract.type === 'CE' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                }`}>
+                  {selectedContract.type}
+                </span>
+                <h3 className="text-sm font-bold text-gray-900 font-mono">
+                  {underlying} {selectedContract.strike} {selectedContract.type}
+                </h3>
+              </div>
+              <button
+                onClick={() => setSelectedContract(null)}
+                className="text-gray-400 hover:text-gray-600 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="py-4 space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-gray-50 p-2.5 rounded-lg border border-gray-100">
+                  <span className="text-[10px] uppercase font-bold text-gray-400">LTP</span>
+                  <div className="text-base font-bold font-mono text-gray-900 mt-0.5">
+                    ₹{selectedContract.contract.ltp.toFixed(2)}
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 p-2.5 rounded-lg border border-gray-100">
+                  <span className="text-[10px] uppercase font-bold text-gray-400">Lot Size</span>
+                  <div className="text-base font-bold font-mono text-gray-900 mt-0.5">
+                    {lotSize}
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 p-2.5 rounded-lg border border-gray-100">
+                  <span className="text-[10px] uppercase font-bold text-gray-400">Contract Token</span>
+                  <div className="text-xs font-mono text-gray-700 mt-0.5 truncate">
+                    {selectedContract.contract.token || 'N/A'}
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 p-2.5 rounded-lg border border-gray-100">
+                  <span className="text-[10px] uppercase font-bold text-gray-400">Estimated Value (1 Lot)</span>
+                  <div className="text-base font-bold font-mono text-blue-700 mt-0.5">
+                    ₹{(selectedContract.contract.ltp * lotSize).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-blue-50/60 p-3 rounded-lg border border-blue-100 text-blue-900 text-[11px] leading-relaxed">
+                <strong>Expiry:</strong> {selectedExpiry} · <strong>Trading Symbol:</strong> {selectedContract.contract.symbol}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-gray-100 flex items-center justify-end space-x-2">
+              <button
+                onClick={() => setSelectedContract(null)}
+                className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+              >
+                Close
+              </button>
+              {onNavigateTrader && (
+                <button
+                  onClick={() => {
+                    const sym = selectedContract.contract.symbol || `${underlying}${selectedContract.strike}${selectedContract.type}`;
+                    onNavigateTrader(sym, {
+                      symbol: sym,
+                      strike: selectedContract.strike,
+                      type: selectedContract.type,
+                      price: selectedContract.contract.ltp,
+                      lots: 1
+                    });
+                  }}
+                  className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center space-x-1.5 shadow-2xs"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>Trade in Terminal</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

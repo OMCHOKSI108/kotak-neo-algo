@@ -84,3 +84,9 @@ async def user_token() -> str:
             await session.refresh(user)
 
         return create_access_token({"sub": str(user.id), "email": user.email, "role": "user"})
+
+
+@pytest_asyncio.fixture
+async def db_session():
+    async with TestSessionLocal() as session:
+        yield session

@@ -1,7 +1,10 @@
 import {
   AuthResponse, User, Quote, OptionChain, BrokerAccount,
   BrokerProfile, StrategyDefinition, BacktestReport,
-  AdminUserItem, AuditLogItem
+  AdminUserItem, AuditLogItem, SanitizedBrokerConnectResponse,
+  UserTradingSettings, StrategyItem, TraderOrderRequest,
+  TraderOrderResponse, TraderPositionsSummary, TraderOrderItem,
+  AnalyticsSummary
 } from './types';
 
 const API_BASE = '/api';
@@ -126,5 +129,76 @@ export const api = {
   deleteUser: (userId: number): Promise<{ message: string }> =>
     request(`/admin/users/${userId}`, { method: 'DELETE' }),
 
+  resetUserPassword: (userId: number, newPassword: string): Promise<{ success: boolean; message: string }> =>
+    request(`/admin/users/${userId}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ new_password: newPassword }),
+    }),
+
   getAuditLogs: (): Promise<AuditLogItem[]> => request('/admin/audit-logs'),
+
+  // Trader & Risk Management
+  getTraderSettings: (): Promise<UserTradingSettings> => request('/trader/settings'),
+
+  updateTraderSettings: (payload: Partial<UserTradingSettings>): Promise<UserTradingSettings> =>
+    request('/trader/settings', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  getLotSizes: (): Promise<Record<string, number>> => request('/trader/lots'),
+
+  placeTraderOrder: (payload: TraderOrderRequest): Promise<TraderOrderResponse> =>
+    request('/trader/order', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  getTraderPositions: (): Promise<TraderPositionsSummary> => request('/trader/positions'),
+
+  squareOffPosition: (positionId: number): Promise<{ success: boolean; message: string }> =>
+    request(`/trader/positions/${positionId}/square-off`, { method: 'POST' }),
+
+  squareOffAllPositions: (): Promise<{ success: boolean; count: number; message: string }> =>
+    request('/trader/positions/square-off-all', { method: 'POST' }),
+
+  getTraderOrders: (): Promise<TraderOrderItem[]> => request('/trader/orders'),
+
+  // Algorithm Strategies
+  getUserStrategies: (): Promise<StrategyItem[]> => request('/strategies'),
+
+  createUserStrategy: (payload: Partial<StrategyItem>): Promise<StrategyItem> =>
+    request('/strategies', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  updateUserStrategy: (id: number, payload: Partial<StrategyItem>): Promise<StrategyItem> =>
+    request(`/strategies/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+
+  deployStrategy: (id: number, mode: 'PAPER' | 'LIVE'): Promise<StrategyItem> =>
+    request(`/strategies/${id}/deploy`, {
+      method: 'POST',
+      body: JSON.stringify({ mode }),
+    }),
+
+  pauseStrategy: (id: number): Promise<StrategyItem> =>
+    request(`/strategies/${id}/pause`, { method: 'POST' }),
+
+  stopStrategy: (id: number): Promise<StrategyItem> =>
+    request(`/strategies/${id}/stop`, { method: 'POST' }),
+
+  deleteStrategy: (id: number): Promise<{ success: boolean; message: string }> =>
+    request(`/strategies/${id}`, { method: 'DELETE' }),
+
+  // Performance Analytics
+  getAnalytics: (period: string = 'today'): Promise<AnalyticsSummary> =>
+    request(`/analytics?period=${period}`),
+
+  // System Health
+  getHealth: (): Promise<{ status: string; app_name: string; trading_enabled: boolean; active_broker: string; is_connected: boolean }> =>
+    request('/health'),
 };

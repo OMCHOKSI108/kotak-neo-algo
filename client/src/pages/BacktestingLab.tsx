@@ -6,7 +6,11 @@ import {
   ArrowUpRight, ArrowDownRight, FileText, Wallet
 } from 'lucide-react';
 
-export const BacktestingLab: React.FC = () => {
+interface BacktestingLabProps {
+  initialStrategy?: string;
+}
+
+export const BacktestingLab: React.FC<BacktestingLabProps> = ({ initialStrategy }) => {
   const [strategies, setStrategies] = useState<StrategyDefinition[]>([]);
   const [datasets, setDatasets] = useState<string[]>([]);
   const [brokerProfile, setBrokerProfile] = useState<BrokerProfile | null>(null);

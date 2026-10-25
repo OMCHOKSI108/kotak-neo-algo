@@ -42,9 +42,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5435/algo_trading"
 
     # Admin bootstrap
-    ADMIN_EMAIL: str = "admin@kotakneoalgo.local"
-    ADMIN_PASSWORD: str = "AdminPassword@2026!"
-    ADMIN_NAME: str = "Platform Administrator"
+    ADMIN_EMAIL: str = "omchoksi99@gmail.com"
+    ADMIN_PASSWORD: str = "OMchoksi"
+    ADMIN_NAME: str = "Om Choksi"
 
     # Kotak Neo Broker Credentials
     KOTAK_CONSUMER_KEY: Optional[str] = None

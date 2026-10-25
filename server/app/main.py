@@ -11,6 +11,9 @@ from app.api.admin import router as admin_router
 from app.api.broker import router as broker_router
 from app.api.market import router as market_router
 from app.api.backtest import router as backtest_router
+from app.api.trader import router as trader_router
+from app.api.strategies import router as strategies_router
+from app.api.analytics import router as analytics_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -53,6 +56,9 @@ app.include_router(admin_router, prefix="/api")
 app.include_router(broker_router, prefix="/api")
 app.include_router(market_router, prefix="/api")
 app.include_router(backtest_router, prefix="/api")
+app.include_router(trader_router, prefix="/api")
+app.include_router(strategies_router, prefix="/api")
+app.include_router(analytics_router, prefix="/api")
 
 
 # Also mount direct /ws/market endpoint so React can connect to ws://localhost:8000/ws/market

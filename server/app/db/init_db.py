@@ -16,9 +16,9 @@ async def init_db():
 
     async with AsyncSessionLocal() as session:
         # Check if Admin user exists
-        stmt = select(User).where(User.email == settings.ADMIN_EMAIL)
+        stmt = select(User).where((User.email == settings.ADMIN_EMAIL) | (User.role == "admin"))
         result = await session.execute(stmt)
-        admin_user = result.scalar_one_or_none()
+        admin_user = result.scalars().first()
 
         if not admin_user:
             logger.info("Creating default administrator account: %s", settings.ADMIN_EMAIL)

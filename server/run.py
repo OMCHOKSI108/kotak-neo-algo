@@ -7,6 +7,9 @@ Allows starting the FastAPI backend with:
 """
 import os
 import sys
+import socket
+import subprocess
+import time
 from pathlib import Path
 
 SERVER_DIR = Path(__file__).resolve().parent
@@ -25,6 +28,28 @@ import uvicorn
 from app.core.config import settings
 
 
+def is_port_open(host: str, port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(1.0)
+        return s.connect_ex((host, port)) == 0
+
+
+def ensure_postgres_running():
+    """Automatically start the local Docker postgres container if port 5435 is closed."""
+    if not is_port_open("127.0.0.1", 5435):
+        print("  [DB] PostgreSQL (port 5435) is not running. Starting 'postgres' container...")
+        try:
+            subprocess.run(["docker", "start", "postgres"], check=True, capture_output=True)
+            for _ in range(15):
+                if is_port_open("127.0.0.1", 5435):
+                    time.sleep(1.0)
+                    print("  [DB] PostgreSQL container started and ready on port 5435.")
+                    break
+                time.sleep(0.5)
+        except Exception as e:
+            print(f"  [DB Warning] Could not auto-start postgres container: {e}")
+
+
 def main():
     print("=" * 65)
     print(f"  🚀 {settings.APP_NAME}")
@@ -38,6 +63,8 @@ def main():
     print("    cd client")
     print("    npm run dev")
     print("=" * 65)
+
+    ensure_postgres_running()
 
     uvicorn.run(
         "app.main:app",

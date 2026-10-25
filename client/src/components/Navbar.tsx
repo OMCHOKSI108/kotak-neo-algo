@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { User } from '../types';
 import {
   TrendingUp, Activity, Layers, BarChart2, Settings,
-  ShieldCheck, UserPlus, LogOut, ChevronDown, User as UserIcon, Menu, X
+  ShieldCheck, UserPlus, LogOut, ChevronDown, Menu, X,
+  LayoutDashboard, Terminal, FileText, Briefcase, Cpu
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -46,16 +47,34 @@ export const Navbar: React.FC<NavbarProps> = ({
       return parts[0].slice(0, 2).toUpperCase();
     }
     if (email) return email.slice(0, 2).toUpperCase();
-    return 'US';
+    return 'TR';
   };
 
-  const navItems = [
-    { id: 'market', label: 'Market', icon: Activity },
+  // Role-based navigation tabs
+  const adminNavItems = [
+    { id: 'market', label: 'Markets', icon: Activity },
     { id: 'option-chain', label: 'Option Chain', icon: Layers },
+    { id: 'strategies', label: 'Strategies', icon: Cpu },
+    { id: 'backtest', label: 'Backtest', icon: BarChart2 },
+    { id: 'analytics', label: 'Analytics', icon: TrendingUp },
+    { id: 'admin', label: 'Users', icon: ShieldCheck },
+    { id: 'broker', label: 'Brokers', icon: Settings },
+  ];
+
+  const traderNavItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'market', label: 'Markets', icon: Activity },
+    { id: 'option-chain', label: 'Option Chain', icon: Layers },
+    { id: 'strategies', label: 'Strategies', icon: Cpu },
+    { id: 'trader', label: 'Trader', icon: Terminal },
+    { id: 'orders', label: 'Orders', icon: FileText },
+    { id: 'positions', label: 'Positions', icon: Briefcase },
+    { id: 'analytics', label: 'Analytics', icon: TrendingUp },
     { id: 'backtest', label: 'Backtest', icon: BarChart2 },
     { id: 'broker', label: 'Brokers', icon: Settings },
-    ...(isAdmin ? [{ id: 'admin', label: 'Users', icon: ShieldCheck }] : []),
   ];
+
+  const navItems = isAdmin ? adminNavItems : traderNavItems;
 
   const handleTabClick = (tabId: string) => {
     setActiveTab(tabId);
@@ -65,14 +84,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-xs font-sans">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-15">
+        <div className="flex items-center justify-between h-14">
           {/* Left: Brand Logo & Title */}
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 shrink-0">
             <button
-              onClick={() => handleTabClick('market')}
+              onClick={() => handleTabClick(isAdmin ? 'market' : 'dashboard')}
               className="flex items-center space-x-2.5 focus:outline-none text-left"
             >
-              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-xs">
+              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-2xs">
                 <TrendingUp className="w-4 h-4" />
               </div>
               <div>
@@ -86,8 +105,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           </div>
 
-          {/* Center: Clean Segmented Navigation Links */}
-          <nav className="hidden md:flex items-center space-x-1">
+          {/* Center: Segmented Navigation Links (Desktop) */}
+          <nav className="hidden lg:flex items-center space-x-0.5 overflow-x-auto py-1">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
@@ -95,9 +114,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   key={item.id}
                   onClick={() => handleTabClick(item.id)}
-                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
                     isActive
-                      ? 'bg-gray-100 text-gray-900 font-bold shadow-xs'
+                      ? 'bg-gray-100 text-gray-900 font-bold shadow-2xs'
                       : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                   }`}
                 >
@@ -109,25 +128,25 @@ export const Navbar: React.FC<NavbarProps> = ({
           </nav>
 
           {/* Right: Feed Status, Quick Actions, Profile Dropdown */}
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2.5 shrink-0">
             {/* Live Feed Pill Indicator */}
             <div
               className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-gray-50 border border-gray-200 text-gray-600"
-              title={isWsConnected ? 'Market data feed is connected' : 'Connecting to market feed...'}
+              title={isWsConnected ? 'Market feed active (NSE WebSocket)' : 'Market feed disconnected'}
             >
               <span
                 className={`w-2 h-2 rounded-full ${
                   isWsConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
                 }`}
               />
-              <span className="hidden sm:inline font-mono">{isWsConnected ? 'Feed Live' : 'Feed Offline'}</span>
+              <span className="hidden sm:inline font-mono">{isWsConnected ? 'Live Feed' : 'Feed Offline'}</span>
             </div>
 
             {/* Admin Quick Action Button: + Add User */}
             {isAdmin && onOpenCreateUser && (
               <button
                 onClick={onOpenCreateUser}
-                className="hidden sm:flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors shadow-xs"
+                className="hidden sm:flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors shadow-2xs"
                 title="Create a new trader account"
               >
                 <UserPlus className="w-3.5 h-3.5" />
@@ -159,12 +178,12 @@ export const Navbar: React.FC<NavbarProps> = ({
 
               {/* Dropdown Content Card */}
               {dropdownOpen && (
-                <div className="absolute right-0 mt-2 w-60 bg-white border border-gray-200 rounded-xl shadow-lg p-2 z-50 text-xs animate-fade-in font-sans">
+                <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-xl shadow-lg p-2 z-50 text-xs animate-fade-in font-sans">
                   {/* User Profile Summary */}
                   <div className="p-2.5 border-b border-gray-100">
                     <p className="font-bold text-gray-900 text-sm truncate">{user.full_name}</p>
                     <p className="text-gray-500 font-mono text-[11px] truncate mt-0.5">{user.email}</p>
-                    <div className="mt-2">
+                    <div className="mt-2 flex items-center space-x-2">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                         isAdmin
                           ? 'bg-purple-50 text-purple-700 border border-purple-200'
@@ -177,19 +196,17 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                   {/* Menu Options */}
                   <div className="py-1">
-                    {isAdmin && (
+                    {isAdmin ? (
                       <>
                         <button
                           onClick={() => {
                             setDropdownOpen(false);
                             setActiveTab('admin');
                           }}
-                          className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 font-medium flex items-center justify-between"
+                          className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 font-medium flex items-center space-x-2"
                         >
-                          <span className="flex items-center space-x-2">
-                            <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
-                            <span>User Management</span>
-                          </span>
+                          <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+                          <span>User Management</span>
                         </button>
 
                         {onOpenCreateUser && (
@@ -204,6 +221,30 @@ export const Navbar: React.FC<NavbarProps> = ({
                             <span>Create New User</span>
                           </button>
                         )}
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => {
+                            setDropdownOpen(false);
+                            setActiveTab('trader');
+                          }}
+                          className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 font-medium flex items-center space-x-2"
+                        >
+                          <Terminal className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Trader Terminal</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setDropdownOpen(false);
+                            setActiveTab('positions');
+                          }}
+                          className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 font-medium flex items-center space-x-2"
+                        >
+                          <Briefcase className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Positions & MTM</span>
+                        </button>
                       </>
                     )}
 
@@ -239,7 +280,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Mobile Hamburger Button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-1.5 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:outline-none"
+              className="lg:hidden p-1.5 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:outline-none"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -248,7 +289,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Mobile Navigation Drawer */}
         {mobileMenuOpen && (
-          <div className="md:hidden py-3 border-t border-gray-200 space-y-1">
+          <div className="lg:hidden py-3 border-t border-gray-200 grid grid-cols-2 gap-1 animate-fade-in">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
@@ -256,9 +297,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   key={item.id}
                   onClick={() => handleTabClick(item.id)}
-                  className={`w-full flex items-center space-x-2 px-3 py-2 rounded-lg text-xs font-semibold ${
+                  className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-xs font-semibold ${
                     isActive
-                      ? 'bg-blue-50 text-blue-700'
+                      ? 'bg-blue-50 text-blue-700 font-bold'
                       : 'text-gray-700 hover:bg-gray-50'
                   }`}
                 >

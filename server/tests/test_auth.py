@@ -1,5 +1,6 @@
 import pytest
 from httpx import AsyncClient
+from app.core.config import settings
 from app.core.security import (
     verify_password, get_password_hash, create_access_token, decode_access_token,
     encrypt_credential, decrypt_credential, mask_secret
@@ -45,13 +46,13 @@ async def test_auth_login_success_and_failure(client: AsyncClient):
     resp = await client.post("/api/auth/login", json={"email": "nonexistent@user.com", "password": "any"})
     assert resp.status_code == 401
 
-    # Test login with seeded admin
+    # Test login with real admin
     resp = await client.post("/api/auth/login", json={
-        "email": "admin@kotakneoalgo.local",
-        "password": "AdminPassword@2026!"
+        "email": settings.ADMIN_EMAIL,
+        "password": settings.ADMIN_PASSWORD
     })
     assert resp.status_code == 200
     data = resp.json()
     assert "access_token" in data
-    assert data["user"]["email"] == "admin@kotakneoalgo.local"
+    assert data["user"]["email"] == settings.ADMIN_EMAIL
     assert data["user"]["role"] == "admin"

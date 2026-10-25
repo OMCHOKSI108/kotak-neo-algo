@@ -5,8 +5,10 @@ from app.strategies.base import BaseStrategy
 from app.strategies.sma_crossover import SMACrossoverStrategy
 from app.strategies.rsi_strategy import RSIMeanReversionStrategy
 from app.strategies.breakout_strategy import HighLowBreakoutStrategy
+from app.strategies.ema_9_15 import Nifty915EMAStrategy
 
 STRATEGY_MAP: Dict[str, BaseStrategy] = {
+    "nifty_9_15_ema": Nifty915EMAStrategy(),
     "sma_crossover": SMACrossoverStrategy(),
     "rsi_mean_reversion": RSIMeanReversionStrategy(),
     "channel_breakout": HighLowBreakoutStrategy(),
