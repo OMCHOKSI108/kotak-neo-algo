@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 from sqlalchemy import (
-    Column, Integer, String, Boolean, DateTime, ForeignKey, Text, JSON, Float
+    Column, Integer, String, Boolean, DateTime, ForeignKey, Text, JSON, Float, Index
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -32,6 +32,9 @@ class User(Base):
 
 class BrokerAccount(Base):
     __tablename__ = "broker_accounts"
+    __table_args__ = (
+        Index("ix_broker_accounts_user_status", "user_id", "status"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -87,6 +90,9 @@ class BrokerAccount(Base):
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("ix_audit_logs_user_created", "user_id", "created_at"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
@@ -195,6 +201,10 @@ class Strategy(Base):
 
 class OrderRecord(Base):
     __tablename__ = "orders"
+    __table_args__ = (
+        Index("ix_orders_user_status", "user_id", "status"),
+        Index("ix_orders_user_placed_at", "user_id", "placed_at"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -227,6 +237,9 @@ class OrderRecord(Base):
 
 class PositionRecord(Base):
     __tablename__ = "positions"
+    __table_args__ = (
+        Index("ix_positions_user_sym_prod_stat", "user_id", "symbol", "product", "status", "mode"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)

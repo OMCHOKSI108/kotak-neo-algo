@@ -61,7 +61,7 @@ def validate_kotak_credentials(credentials: Dict[str, Any]) -> None:
     mobile = credentials.get("mobile_number", "").strip()
     ucc = credentials.get("ucc", "").strip()
     mpin = credentials.get("mpin", "").strip()
-    totp = str(credentials.get("totp", "")).strip()
+    totp = str(credentials.get("totp") or credentials.get("totp_secret") or "").strip()
 
     if not consumer_key:
         raise ValueError("Consumer Key / Access Token is required.")
@@ -73,6 +73,17 @@ def validate_kotak_credentials(credentials: Dict[str, Any]) -> None:
         raise ValueError("Valid MPIN is required (at least 4-6 digits).")
     if not totp:
         raise ValueError("Current 6-digit TOTP is required.")
+    
+    # If base32 secret was provided, dynamically derive the current 6-digit TOTP
+    if not (totp.isdigit() and len(totp) == 6):
+        try:
+            import pyotp
+            generated = pyotp.TOTP(totp).now()
+            totp = generated
+            credentials["totp"] = generated
+        except Exception:
+            pass
+
     if not re.match(r"^\d{6}$", totp):
         raise ValueError("TOTP must be exactly 6 digits.")
 

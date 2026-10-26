@@ -126,13 +126,27 @@ async def connect_broker(
     broker_type = (req.broker or req.broker_name or "").strip().upper()
 
     if broker_type in ("KOTAK_NEO", "KOTAK", "KOTAKNEO"):
+        # Resolve TOTP: support either direct 6-digit TOTP code ('totp') or TOTP secret ('totp_secret')
+        totp_val = req.totp
+        if not totp_val and req.totp_secret:
+            secret_clean = req.totp_secret.strip()
+            if secret_clean.isdigit() and len(secret_clean) == 6:
+                totp_val = secret_clean
+            else:
+                try:
+                    import pyotp
+                    totp_val = pyotp.TOTP(secret_clean).now()
+                except Exception as e:
+                    logger.warning("Could not derive TOTP from totp_secret: %s", e)
+
         # Validate Kotak Neo credentials
         creds = {
             "consumer_key": req.consumer_key,
             "mobile_number": req.mobile_number,
             "ucc": req.ucc,
             "mpin": req.mpin,
-            "totp": req.totp,
+            "totp": totp_val,
+            "totp_secret": req.totp_secret,
             "environment": req.environment,
         }
 
@@ -258,7 +272,26 @@ async def connect_broker(
 
         # Initialize Kotak Neo Adapter with active session
         adapter = get_broker_adapter("kotak_neo", account_id=user.id, credentials=creds)
+        if hasattr(adapter, "set_session_tokens"):
+            adapter.set_session_tokens(
+                session_data={
+                    "trading_token": session.trading_token,
+                    "trading_sid": session.trading_sid,
+                    "view_token": session.view_token,
+                    "view_sid": session.view_sid,
+                    "base_url": session.base_url,
+                    "data_center": session.data_center,
+                },
+                consumer_key=req.consumer_key,
+                ucc=req.ucc,
+                environment=req.environment
+            )
         market_service.set_adapter(adapter)
+        try:
+            from app.api.trader import _USER_BROKER_ADAPTERS
+            _USER_BROKER_ADAPTERS[user.id] = adapter
+        except Exception:
+            pass
 
         # Audit log for success
         audit_success = AuditLog(

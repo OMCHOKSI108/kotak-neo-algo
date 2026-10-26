@@ -1,17 +1,94 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: postgres
+    container_name: kotak-neo-postgres
     restart: unless-stopped
     ports:
-      - "5435:5432"
+      - "${POSTGRES_PORT:-5435}:5432"
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: algo_trading
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-algo_trading}
     volumes:
       - kotak_neo_algo_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-algo_trading}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - algo-network
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: kotak-neo-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-algo_trading}
+      APP_NAME: "${APP_NAME:-Indian Algo Trading & Research Platform}"
+      APP_ENV: "${APP_ENV:-production}"
+      DEBUG: "${DEBUG:-false}"
+      HOST: "0.0.0.0"
+      PORT: 8000
+      TRADING_ENABLED: "${TRADING_ENABLED:-false}"
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY:-iAMArUJ66YJA_9C0HsIN-otQbfaJkHCwNi8lmxsMUSw=}"
+      BROKER_ENCRYPTION_KEY: "${BROKER_ENCRYPTION_KEY:-3d115d4341000b58bd19a63509aa4235d548e3f092e205660847c961f52163da}"
+      JWT_SECRET_KEY: "${JWT_SECRET_KEY:-algo_platform_super_secret_jwt_key_2026_change_in_prod}"
+      JWT_ALGORITHM: "${JWT_ALGORITHM:-HS256}"
+      ACCESS_TOKEN_EXPIRE_MINUTES: "${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}"
+      ADMIN_EMAIL: "${ADMIN_EMAIL:-omchoksi99@gmail.com}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-OMchoksi}"
+      ADMIN_NAME: "${ADMIN_NAME:-Om Choksi}"
+      KOTAK_CONSUMER_KEY: "${KOTAK_CONSUMER_KEY:-}"
+      KOTAK_CONSUMER_SECRET: "${KOTAK_CONSUMER_SECRET:-}"
+      KOTAK_MOBILE_NUMBER: "${KOTAK_MOBILE_NUMBER:-}"
+      KOTAK_UCC: "${KOTAK_UCC:-}"
+      KOTAK_MPIN: "${KOTAK_MPIN:-}"
+      KOTAK_TOTP_SECRET: "${KOTAK_TOTP_SECRET:-}"
+      KOTAK_ENVIRONMENT: "${KOTAK_ENVIRONMENT:-prod}"
+      CORS_ORIGINS: '["http://localhost:3000","http://localhost:5173","http://localhost","http://127.0.0.1:3000","http://127.0.0.1"]'
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - algo-network
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: kotak-neo-client
+    restart: unless-stopped
+    depends_on:
+      server:
+        condition: service_healthy
+    ports:
+      - "${CLIENT_PORT:-3000}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - algo-network
+
+networks:
+  algo-network:
+    name: kotak_neo_algo_network
+    driver: bridge
 
 volumes:
   kotak_neo_algo_pgdata:
-    name: kotak_neo_algo_pgdata
+    external: true

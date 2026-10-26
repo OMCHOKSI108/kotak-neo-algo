@@ -22,15 +22,20 @@ logging.basicConfig(
 logger = logging.getLogger("kotak_neo_algo")
 
 
+from app.core.telemetry import execution_metrics
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan: database initialization and background market service startup."""
+    """Application lifespan: database initialization, telemetry monitoring, and background market service startup."""
     logger.info("Starting %s in %s mode...", settings.APP_NAME, settings.APP_ENV)
     # Initialize database tables and bootstrap admin
     await init_db()
+    # Start execution metrics and event loop monitor
+    await execution_metrics.start_event_loop_monitor()
     # Start market data background streaming
     await market_service.start()
     yield
+    execution_metrics.stop_event_loop_monitor()
     logger.info("Shutting down %s...", settings.APP_NAME)
 
 
@@ -210,12 +215,13 @@ async def root():
 @app.get("/health")
 @app.get("/api/health")
 async def health_check():
-    """Health check endpoint exposing platform and safety status."""
+    """Health check endpoint exposing platform, safety, broker, and execution latency telemetry."""
     return {
         "status": "healthy",
         "app_name": settings.APP_NAME,
         "trading_enabled": settings.TRADING_ENABLED,
         "active_broker": market_service.adapter.broker_name,
         "is_connected": market_service.adapter.is_connected,
+        "telemetry": execution_metrics.get_summary()
     }
 

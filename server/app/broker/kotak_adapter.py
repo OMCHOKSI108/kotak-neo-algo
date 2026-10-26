@@ -3,7 +3,7 @@ import logging
 import math
 import urllib.parse
 from datetime import datetime, timezone, date
-from typing import List, Optional, Callable, Dict, Any
+from typing import List, Optional, Callable, Dict, Any, Tuple
 import httpx
 
 from app.broker.base import BrokerAdapter
@@ -227,6 +227,60 @@ class KotakNeoAdapter(BrokerAdapter):
                 message=f"Kotak Neo authentication failed: {str(e)}",
                 session_metadata={"error": str(e)}
             )
+
+    def set_session_tokens(
+        self,
+        session_data: Dict[str, Any],
+        consumer_key: Optional[str] = None,
+        ucc: Optional[str] = None,
+        environment: str = "prod"
+    ) -> None:
+        """
+        Hydrate NeoAPI client with active session tokens (trading_token, trading_sid, view_token, base_url).
+        Avoids redundant 2FA round-trips and enables immediate order execution.
+        """
+        if not KOTAK_SDK_AVAILABLE:
+            return
+
+        ck = consumer_key or self._credentials.get("consumer_key") or ""
+        u = ucc or self._credentials.get("ucc") or ""
+        env = environment or self._credentials.get("environment", "prod")
+
+        client = NeoAPI(consumer_key=ck, environment=env)
+        cfg = client.configuration
+
+        trading_token = session_data.get("trading_token") or session_data.get("token")
+        trading_sid = session_data.get("trading_sid") or session_data.get("sid")
+        view_token = session_data.get("view_token")
+        view_sid = session_data.get("view_sid")
+        base_url = session_data.get("base_url") or session_data.get("baseUrl")
+        data_center = session_data.get("data_center") or session_data.get("dataCenter")
+
+        cfg.bearer_token = trading_token
+        cfg.edit_token = trading_token
+        cfg.view_token = view_token
+        cfg.sid = trading_sid or view_sid
+        cfg.edit_sid = trading_sid
+        cfg.base_url = base_url
+        cfg.data_center = data_center
+        cfg.ucc = u
+        cfg.userId = u
+
+        self._client = client
+        self._connected = bool(trading_token and trading_sid)
+        self._session_data = session_data
+        logger.info("KotakNeoAdapter hydrated with active trading tokens for UCC %s", u)
+
+    def _get_client_ip(self) -> str:
+        try:
+            if self._client:
+                res = self._client.whatsmyip()
+                if isinstance(res, dict) and "data" in res and res["data"]:
+                    return str(res["data"][0].get("ip", "unknown"))
+        except Exception:
+            pass
+        return "unknown"
+
 
     @staticmethod
     def _parse_kotak_limits(resp: Any) -> Tuple[float, float, float, float]:
@@ -1059,7 +1113,7 @@ class KotakNeoAdapter(BrokerAdapter):
                 # Or {"stat": "Not_Ok", "emsg": "...", "stCode": ...} on failure/rejection
                 stat = resp.get("stat")
                 if stat == "Not_Ok" or "Error" in resp or "error" in resp or "Error Message" in resp:
-                    err_msg = (
+                    raw_err = (
                         resp.get("emsg")
                         or resp.get("errMsg")
                         or resp.get("message")
@@ -1068,11 +1122,23 @@ class KotakNeoAdapter(BrokerAdapter):
                         or resp.get("Error Message")
                         or "Order rejected by Kotak Neo"
                     )
+                    st_code = resp.get("stCode")
+                    if st_code == 100008 or "unauthorized" in str(raw_err).lower():
+                        curr_ip = self._get_client_ip()
+                        err_msg = (
+                            f"Kotak Neo Error (100008 - Unauthorized): Your current public IP ({curr_ip}) "
+                            f"is not whitelisted in Kotak Neo Trade API settings. "
+                            f"SEBI regulations require Kotak Neo to enforce static IP whitelisting for order execution. "
+                            f"Please update your Static IP in Kotak Neo (More -> Trade API -> API Dashboard)."
+                        )
+                    else:
+                        err_msg = str(raw_err)
+
                     logger.warning("Kotak Neo order placement returned error: %s", resp)
                     return OrderResult(
                         success=False,
                         order_id=None,
-                        message=str(err_msg),
+                        message=err_msg,
                         status="REJECTED"
                     )
 
@@ -1081,7 +1147,6 @@ class KotakNeoAdapter(BrokerAdapter):
                 # Check post-placement order status from Kotak Neo to catch RMS 0-balance rejection
                 if order_id and order_id != "SUBMITTED":
                     try:
-                        await asyncio.sleep(0.2)
                         hist_resp = await loop.run_in_executor(
                             None,
                             lambda: self._client.order_history(order_id=str(order_id))

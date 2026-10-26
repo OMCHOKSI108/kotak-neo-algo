@@ -12,6 +12,36 @@ def calculate_ema(series: pd.Series, period: int = 20) -> pd.Series:
     return series.ewm(span=period, adjust=False).mean()
 
 
+def incremental_ema(price: float, previous_ema: float, period: int) -> float:
+    """
+    O(1) incremental EMA calculation for ultra-low latency real-time tick processing.
+    Avoids expensive Pandas DataFrame / Series reallocation on every incoming market tick.
+    """
+    if previous_ema <= 0.0:
+        return price
+    alpha = 2.0 / (period + 1.0)
+    return (alpha * price) + ((1.0 - alpha) * previous_ema)
+
+
+def fast_ema_cross(
+    current_fast: float,
+    current_slow: float,
+    previous_fast: float,
+    previous_slow: float
+) -> int:
+    """
+    O(1) EMA crossover evaluation:
+    Returns +1 for bullish golden cross (fast crosses above slow).
+    Returns -1 for bearish death cross (fast crosses below slow).
+    Returns 0 for continuation / no cross.
+    """
+    if previous_fast <= previous_slow and current_fast > current_slow:
+        return 1
+    elif previous_fast >= previous_slow and current_fast < current_slow:
+        return -1
+    return 0
+
+
 def calculate_rsi(series: pd.Series, period: int = 14) -> pd.Series:
     """Calculate Relative Strength Index (RSI)."""
     delta = series.diff()

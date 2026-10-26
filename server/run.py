@@ -37,18 +37,18 @@ def is_port_open(host: str, port: int) -> bool:
 def ensure_postgres_running():
     """Automatically start or recreate the local Docker postgres container if port 5435 is closed."""
     if not is_port_open("127.0.0.1", 5435):
-        print("  [DB] PostgreSQL (port 5435) is not running. Starting 'postgres' container...")
+        print("  [DB] PostgreSQL (port 5435) is not running. Starting 'kotak-neo-postgres' container...")
         started = False
         try:
-            res = subprocess.run(["docker", "start", "postgres"], capture_output=True, text=True)
+            res = subprocess.run(["docker", "start", "kotak-neo-postgres"], capture_output=True, text=True)
             if res.returncode == 0:
                 started = True
             else:
-                # If container does not exist, create it with volume
                 root_dir = SERVER_DIR.parent
                 compose_file = root_dir / "docker-compose.yml"
                 if compose_file.exists():
-                    subprocess.run(["docker", "compose", "-f", str(compose_file), "up", "-d"], capture_output=True, check=True)
+                    subprocess.run(["docker", "compose", "-f", str(compose_file), "up", "-d", "postgres"], capture_output=True, check=True)
+                    started = True
                 else:
                     subprocess.run([
                         "docker", "run", "-d", "--name", "postgres",

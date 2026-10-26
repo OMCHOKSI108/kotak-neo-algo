@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Dict, List, Set, Optional, Any
+from typing import Dict, List, Set, Optional, Any, Callable
 from fastapi import WebSocket
 from app.broker.base import BrokerAdapter
 from app.broker.schemas import Quote, OptionChain
@@ -33,6 +33,7 @@ class MarketDataService:
         self._adapter: BrokerAdapter = adapter or KotakNeoAdapter()
         self._cached_quotes: Dict[str, Quote] = {}
         self._active_connections: Set[WebSocket] = set()
+        self._strategy_subscribers: List[Callable[[Quote], Any]] = []
         self._lock = asyncio.Lock()
         self._is_running = False
 
@@ -62,12 +63,36 @@ class MarketDataService:
         except Exception as e:
             logger.error("Error starting MarketDataService: %s", e)
 
+    def subscribe_strategy(self, callback: Callable[[Quote], Any]):
+        """Register a trading strategy for immediate, zero-latency in-process tick notifications."""
+        if callback not in self._strategy_subscribers:
+            self._strategy_subscribers.append(callback)
+
+    def unsubscribe_strategy(self, callback: Callable[[Quote], Any]):
+        """Unregister a trading strategy callback."""
+        if callback in self._strategy_subscribers:
+            self._strategy_subscribers.remove(callback)
+
     async def _on_tick(self, quote: Quote):
-        """Callback invoked when broker emits a market tick."""
+        """
+        Callback invoked when broker emits a market tick.
+        Dispatches to internal strategies first with zero UI latency, then broadcasts asynchronously to React.
+        """
         sym_key = quote.symbol.upper()
         self._cached_quotes[sym_key] = quote
-        # Broadcast to all connected React WebSockets
-        await self._broadcast_tick(quote)
+
+        # 1. Execute strategy callbacks immediately (Hot path: no serialization or network overhead)
+        for cb in self._strategy_subscribers:
+            try:
+                res = cb(quote)
+                if asyncio.iscoroutine(res):
+                    await res
+            except Exception as e:
+                logger.error("Error in strategy tick callback: %s", e)
+
+        # 2. Asynchronously fan out to UI dashboards without blocking tick processing
+        if self._active_connections:
+            asyncio.create_task(self._broadcast_tick(quote))
 
     async def register_client(self, websocket: WebSocket):
         """Register a React client WebSocket connection and send current snapshot."""
@@ -93,25 +118,32 @@ class MarketDataService:
         logger.info("React client disconnected from /ws/market. Remaining clients: %d", len(self._active_connections))
 
     async def _broadcast_tick(self, quote: Quote):
-        """Broadcast single tick to all connected React clients."""
+        """
+        Broadcast single tick to all connected React clients.
+        Pre-serializes JSON once and broadcasts concurrently with timeout to prevent slow client backpressure.
+        """
         if not self._active_connections:
             return
 
-        payload = {
+        import json
+        payload_str = json.dumps({
             "type": "TICK",
             "data": quote.model_dump()
-        }
+        })
 
-        dead_connections = []
-        for ws in list(self._active_connections):
+        async def _safe_send(ws: WebSocket) -> Optional[WebSocket]:
             try:
-                await ws.send_json(payload)
+                await asyncio.wait_for(ws.send_text(payload_str), timeout=0.05)
+                return None
             except Exception:
-                dead_connections.append(ws)
+                return ws
 
-        if dead_connections:
+        results = await asyncio.gather(*[_safe_send(ws) for ws in list(self._active_connections)], return_exceptions=True)
+        dead = [ws for ws in results if isinstance(ws, WebSocket)]
+
+        if dead:
             async with self._lock:
-                for ws in dead_connections:
+                for ws in dead:
                     self._active_connections.discard(ws)
 
     async def get_quotes(self, symbols: Optional[List[str]] = None) -> List[Quote]:

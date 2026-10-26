@@ -1,6 +1,7 @@
 import logging
+import time
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -20,6 +21,17 @@ from app.broker.factory import get_broker_adapter
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/trader", tags=["Trader & Risk"])
+
+# In-memory fast cache for user settings (user_id -> (timestamp, settings_obj))
+_USER_SETTINGS_CACHE: Dict[int, Tuple[float, Any]] = {}
+_USER_SETTINGS_TTL = 15.0  # seconds
+
+# In-memory active broker adapter instances (user_id -> BrokerAdapter)
+_USER_BROKER_ADAPTERS: Dict[int, Any] = {}
+
+# In-memory duplicate order intent guard (intent_signature -> monotonic_timestamp)
+_RECENT_ORDER_SIGNATURES: Dict[str, float] = {}
+_DUPLICATE_GUARD_WINDOW_S = 2.0  # 2.0s duplicate suppression window
 
 # Dynamic master lot sizes
 INDEX_LOT_SIZES: Dict[str, int] = {
@@ -79,6 +91,7 @@ class TraderOrderRequest(BaseModel):
     stop_loss: Optional[float] = None
     target: Optional[float] = None
     mode: Optional[str] = "PAPER"  # PAPER or LIVE
+    client_order_id: Optional[str] = None
 
 
 class TraderOrderResponse(BaseModel):
@@ -91,6 +104,8 @@ class TraderOrderResponse(BaseModel):
     status: str
     mode: str
     message: str
+    client_order_id: Optional[str] = None
+    execution_time_ms: Optional[float] = None
 
 
 # ------------------------------------------------------------------------------
@@ -98,6 +113,7 @@ class TraderOrderResponse(BaseModel):
 # ------------------------------------------------------------------------------
 
 async def get_or_create_user_settings(user_id: int, db: AsyncSession) -> UserTradingSettings:
+    """Fetch or initialize user trading settings bound to the current database session."""
     stmt = select(UserTradingSettings).where(UserTradingSettings.user_id == user_id)
     res = await db.execute(stmt)
     user_settings = res.scalar_one_or_none()
@@ -221,7 +237,9 @@ async def place_trader_order(
     """
     Execute order (Paper or Live).
     Enforces risk limits (Max daily loss, Max trades, TRADING_ENABLED guardrail).
+    Optimized for low-latency with duplicate suppression, adapter caching, and latency telemetry.
     """
+    t_order_start = time.perf_counter_ns()
     s = await get_or_create_user_settings(user.id, db)
     
     # 1. Check Circuit Breaker / Trading Halt
@@ -235,6 +253,34 @@ async def place_trader_order(
     lot_size = get_symbol_lot_size(req.symbol)
     qty = req.quantity if req.quantity and req.quantity > 0 else (req.lots * lot_size)
     target_mode = (req.mode or s.trading_mode or "PAPER").upper()
+
+    # 1b. Duplicate Order Intent Protection & Strict Idempotency
+    now_mono = time.monotonic()
+    if req.client_order_id:
+        # Strict idempotency key check
+        if req.client_order_id in _RECENT_ORDER_SIGNATURES:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Duplicate order submission: client_order_id '{req.client_order_id}' already processed."
+            )
+        _RECENT_ORDER_SIGNATURES[req.client_order_id] = now_mono
+    else:
+        # Rapid burst duplicate submission guard
+        intent_sig = f"{user.id}:{req.symbol}:{req.side}:{qty}:{req.price or 0.0}:{target_mode}"
+        if intent_sig in _RECENT_ORDER_SIGNATURES:
+            if now_mono - _RECENT_ORDER_SIGNATURES[intent_sig] < _DUPLICATE_GUARD_WINDOW_S:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Duplicate order submission detected within {_DUPLICATE_GUARD_WINDOW_S*1000:.0f}ms. Request suppressed."
+                )
+        _RECENT_ORDER_SIGNATURES[intent_sig] = now_mono
+
+    # Housekeeping: prune old signatures
+    if len(_RECENT_ORDER_SIGNATURES) > 1000:
+        thresh = now_mono - 60.0
+        for k in list(_RECENT_ORDER_SIGNATURES.keys()):
+            if _RECENT_ORDER_SIGNATURES[k] < thresh:
+                del _RECENT_ORDER_SIGNATURES[k]
 
     order_id = f"ORD-{uuid.uuid4().hex[:8].upper()}"
     now = datetime.now(timezone.utc)
@@ -252,28 +298,54 @@ async def place_trader_order(
                 detail="User account has not enabled Live Trading mode."
             )
 
-        # Resolve active broker adapter (prefer user's connected BrokerAccount)
-        stmt = select(BrokerAccount).where(
-            BrokerAccount.user_id == user.id,
-            BrokerAccount.is_connected == True
-        )
-        res = await db.execute(stmt)
-        user_broker_acc = res.scalar_one_or_none()
+        # Resolve active broker adapter (Fast-path: in-memory adapter cache to avoid DB reads & Fernet decryption)
+        active_adapter = _USER_BROKER_ADAPTERS.get(user.id)
+        if active_adapter is None or not getattr(active_adapter, "is_connected", False):
+            stmt = select(BrokerAccount).where(
+                BrokerAccount.user_id == user.id,
+                BrokerAccount.status == "CONNECTED"
+            )
+            res = await db.execute(stmt)
+            user_broker_acc = res.scalar_one_or_none()
 
-        active_adapter = market_service.adapter
-        if user_broker_acc:
-            try:
-                creds = {
-                    "consumer_key": decrypt_secret(user_broker_acc.encrypted_consumer_key) if user_broker_acc.encrypted_consumer_key else None,
-                    "mobile_number": decrypt_secret(user_broker_acc.encrypted_mobile_number) if user_broker_acc.encrypted_mobile_number else None,
-                    "ucc": decrypt_secret(user_broker_acc.encrypted_ucc) if user_broker_acc.encrypted_ucc else None,
-                    "mpin": decrypt_secret(user_broker_acc.encrypted_mpin) if user_broker_acc.encrypted_mpin else None,
-                    "totp_secret": decrypt_secret(user_broker_acc.encrypted_totp_secret) if user_broker_acc.encrypted_totp_secret else None,
-                    "environment": (user_broker_acc.session_metadata or {}).get("environment", "prod"),
-                }
-                active_adapter = get_broker_adapter(user_broker_acc.broker, account_id=user.id, credentials=creds)
-            except Exception as e:
-                logger.warning("Could not get user-specific broker adapter for order: %s", e)
+            active_adapter = market_service.adapter
+            if user_broker_acc:
+                try:
+                    consumer_key = decrypt_secret(user_broker_acc.encrypted_consumer_key) if user_broker_acc.encrypted_consumer_key else None
+                    ucc = decrypt_secret(user_broker_acc.encrypted_ucc) if user_broker_acc.encrypted_ucc else None
+                    trading_token = decrypt_secret(user_broker_acc.encrypted_trading_token) if user_broker_acc.encrypted_trading_token else None
+                    trading_sid = decrypt_secret(user_broker_acc.encrypted_trading_sid) if user_broker_acc.encrypted_trading_sid else None
+                    view_token = decrypt_secret(user_broker_acc.encrypted_view_token) if user_broker_acc.encrypted_view_token else None
+                    view_sid = decrypt_secret(user_broker_acc.encrypted_view_sid) if user_broker_acc.encrypted_view_sid else None
+                    base_url = decrypt_secret(user_broker_acc.encrypted_base_url) if user_broker_acc.encrypted_base_url else None
+                    env = (user_broker_acc.session_metadata or {}).get("environment", "prod")
+
+                    creds = {
+                        "consumer_key": consumer_key,
+                        "mobile_number": decrypt_secret(user_broker_acc.encrypted_mobile_number) if user_broker_acc.encrypted_mobile_number else None,
+                        "ucc": ucc,
+                        "mpin": decrypt_secret(user_broker_acc.encrypted_mpin) if user_broker_acc.encrypted_mpin else None,
+                        "totp_secret": decrypt_secret(user_broker_acc.encrypted_totp_secret) if user_broker_acc.encrypted_totp_secret else None,
+                        "environment": env,
+                    }
+                    active_adapter = get_broker_adapter(user_broker_acc.broker, account_id=user.id, credentials=creds)
+                    if hasattr(active_adapter, "set_session_tokens") and trading_token and trading_sid:
+                        active_adapter.set_session_tokens(
+                            session_data={
+                                "trading_token": trading_token,
+                                "trading_sid": trading_sid,
+                                "view_token": view_token,
+                                "view_sid": view_sid,
+                                "base_url": base_url,
+                                "data_center": (user_broker_acc.session_metadata or {}).get("data_center"),
+                            },
+                            consumer_key=consumer_key,
+                            ucc=ucc,
+                            environment=env
+                        )
+                    _USER_BROKER_ADAPTERS[user.id] = active_adapter
+                except Exception as e:
+                    logger.warning("Could not get user-specific broker adapter for order: %s", e)
 
         # Execute via active broker adapter
         broker_res = await active_adapter.place_order(
@@ -327,6 +399,7 @@ async def place_trader_order(
         db.add(audit)
         await db.commit()
 
+        elapsed_ms = round((time.perf_counter_ns() - t_order_start) / 1_000_000.0, 3)
         return TraderOrderResponse(
             success=broker_res.success,
             order_id=order_record.order_id,
@@ -336,7 +409,9 @@ async def place_trader_order(
             price=req.price or 0.0,
             status=order_record.status,
             mode="LIVE",
-            message=broker_res.message
+            message=broker_res.message,
+            client_order_id=req.client_order_id,
+            execution_time_ms=elapsed_ms
         )
 
     # 3. Paper Trading Execution
@@ -455,6 +530,7 @@ async def place_trader_order(
     db.add(audit)
     await db.commit()
 
+    elapsed_ms = round((time.perf_counter_ns() - t_order_start) / 1_000_000.0, 3)
     return TraderOrderResponse(
         success=True,
         order_id=order_id,
@@ -464,7 +540,9 @@ async def place_trader_order(
         price=exec_price,
         status="EXECUTED",
         mode="PAPER",
-        message="Paper order executed successfully."
+        message="Paper order executed successfully.",
+        client_order_id=req.client_order_id,
+        execution_time_ms=elapsed_ms
     )
 
 

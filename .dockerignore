@@ -1,0 +1,17 @@
+.git
+.github
+.gitignore
+.venv
+node_modules
+dist
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+logs
+data
+.env
+.env.*
+!client/.env.example
+!.env.example
