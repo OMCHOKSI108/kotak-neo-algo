@@ -91,4 +91,4 @@ networks:
 
 volumes:
   kotak_neo_algo_pgdata:
-    external: true
+    name: kotak_neo_algo_pgdata
