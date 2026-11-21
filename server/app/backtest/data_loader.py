@@ -169,9 +169,10 @@ def list_available_datasets() -> List[str]:
     ]
 
 
-def load_historical_data(symbol: str, timeframe: str = "1d") -> pd.DataFrame:
+def load_historical_data_with_source(symbol: str, timeframe: str = "1d") -> tuple[pd.DataFrame, str]:
     """
     Load normalized OHLCV data for a given symbol and timeframe.
+    Returns (DataFrame, data_source_description).
     Prioritizes real API market data, caches locally, and cleans NaN/outliers.
     """
     ensure_data_directory()
@@ -179,6 +180,7 @@ def load_historical_data(symbol: str, timeframe: str = "1d") -> pd.DataFrame:
     sym_clean = symbol.upper().strip().replace(" ", "_")
     csv_path = DATA_DIR / f"{sym_clean}_{timeframe}.csv"
 
+    source = "Simulated Market Data"
     df = pd.DataFrame()
 
     # 1. First attempt: Fetch fresh real candles from Live Market API
@@ -186,6 +188,7 @@ def load_historical_data(symbol: str, timeframe: str = "1d") -> pd.DataFrame:
         api_df = fetch_api_historical_data(symbol, timeframe)
         if not api_df.empty and len(api_df) >= 10:
             df = api_df
+            source = "NSE Historical (Yahoo Finance API)"
             # Cache to disk for offline resilience
             df.to_csv(csv_path, index=False)
     except Exception as e:
@@ -195,6 +198,8 @@ def load_historical_data(symbol: str, timeframe: str = "1d") -> pd.DataFrame:
     if df.empty and csv_path.exists():
         try:
             df = pd.read_csv(csv_path)
+            if not df.empty and len(df) >= 5:
+                source = "NSE Historical (Cached)"
         except Exception:
             df = pd.DataFrame()
 
@@ -207,6 +212,7 @@ def load_historical_data(symbol: str, timeframe: str = "1d") -> pd.DataFrame:
         }
         start_p = base_prices.get(sym_clean, 1000.0)
         df = generate_synthetic_ohlcv(sym_clean, start_price=start_p, days=252)
+        source = "Simulated Market Data (Fallback)"
         df.to_csv(csv_path, index=False)
 
     # Standardize column names to lowercase
@@ -216,4 +222,10 @@ def load_historical_data(symbol: str, timeframe: str = "1d") -> pd.DataFrame:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
     df = df.dropna().reset_index(drop=True)
+    return df, source
+
+
+def load_historical_data(symbol: str, timeframe: str = "1d") -> pd.DataFrame:
+    """Wrapper returning dataframe for existing callers."""
+    df, _ = load_historical_data_with_source(symbol, timeframe)
     return df

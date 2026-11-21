@@ -2,15 +2,16 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.models.models import User, BacktestRun, AuditLog
+from app.models.models import User, BacktestRun, AuditLog, Strategy
 from app.api.deps import get_current_user
 from app.backtest.engine import backtest_engine
 from app.backtest.data_loader import list_available_datasets
 from app.strategies.registry import list_strategies, load_strategy_config
+from app.api.strategies import ensure_default_strategy, serialize_strategy
 
 router = APIRouter(prefix="/backtest", tags=["Backtesting Engine"])
 
@@ -44,9 +45,16 @@ class BacktestSummaryResponse(BaseModel):
 
 
 @router.get("/strategies")
-async def get_strategies(user: User = Depends(get_current_user)):
-    """List available parameterized strategies from strategy.json configuration."""
-    return list_strategies()
+async def get_strategies(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user)
+):
+    """List available parameterized strategies from PostgreSQL database (Single Source of Truth)."""
+    await ensure_default_strategy(user.id, db)
+    stmt = select(Strategy).where(Strategy.user_id == user.id).order_by(Strategy.id.asc())
+    res = await db.execute(stmt)
+    db_strats = res.scalars().all()
+    return [serialize_strategy(s) for s in db_strats]
 
 
 @router.get("/datasets")
@@ -66,6 +74,39 @@ async def run_backtest(
     simulate trades with slippage and Indian statutory charges, and store results.
     """
     try:
+        # Resolve strategy from DB if ID or name provided
+        db_strat = None
+        s_id_str = str(req.strategy_id).strip()
+        if s_id_str.isdigit():
+            s_res = await db.execute(
+                select(Strategy).where(and_(Strategy.id == int(s_id_str), Strategy.user_id == user.id))
+            )
+            db_strat = s_res.scalar_one_or_none()
+        if not db_strat:
+            s_res = await db.execute(
+                select(Strategy).where(and_(Strategy.name == s_id_str, Strategy.user_id == user.id))
+            )
+            db_strat = s_res.scalar_one_or_none()
+
+        merged_params = dict(req.parameters or {})
+        strat_display_name = req.strategy_id
+        if db_strat:
+            strat_display_name = db_strat.name
+            if "fast_ema" not in merged_params:
+                merged_params["fast_ema"] = db_strat.fast_ema
+            if "slow_ema" not in merged_params:
+                merged_params["slow_ema"] = db_strat.slow_ema
+            if "stop_loss_pts" not in merged_params:
+                merged_params["stop_loss_pts"] = db_strat.stop_loss
+            if "target_pts" not in merged_params:
+                merged_params["target_pts"] = db_strat.target
+            if "max_trades_per_day" not in merged_params:
+                merged_params["max_trades_per_day"] = db_strat.max_trades_per_day
+            if "schedule_start" not in merged_params:
+                merged_params["schedule_start"] = db_strat.schedule_start
+            if "schedule_end" not in merged_params:
+                merged_params["schedule_end"] = db_strat.schedule_end
+
         report = backtest_engine.run(
             strategy_id=req.strategy_id,
             symbol=req.symbol,
@@ -79,13 +120,14 @@ async def run_backtest(
             segment=req.segment,
             start_date=req.start_date,
             end_date=req.end_date,
-            parameters=req.parameters
+            parameters=merged_params
         )
+        report["strategy_name"] = strat_display_name
 
         # Persist to database
         db_run = BacktestRun(
             user_id=user.id,
-            strategy_name=req.strategy_id,
+            strategy_name=strat_display_name,
             symbol=req.symbol.upper(),
             timeframe=req.timeframe,
             parameters=report.get("parameters", {}),

@@ -87,31 +87,60 @@ def calculate_performance_metrics(
     else:
         sortino = 999.0 if mean_ret > 0 else 0.0
 
-    # Max consecutive losses
+    # Max consecutive losses and wins
     max_consec_losses = 0
-    curr_consec = 0
+    curr_consec_loss = 0
+    max_consec_wins = 0
+    curr_consec_win = 0
     for p in pnls:
         if p < 0:
-            curr_consec += 1
-            if curr_consec > max_consec_losses:
-                max_consec_losses = curr_consec
+            curr_consec_loss += 1
+            if curr_consec_loss > max_consec_losses:
+                max_consec_losses = curr_consec_loss
+            curr_consec_win = 0
+        elif p > 0:
+            curr_consec_win += 1
+            if curr_consec_win > max_consec_wins:
+                max_consec_wins = curr_consec_win
+            curr_consec_loss = 0
         else:
-            curr_consec = 0
+            curr_consec_loss = 0
+            curr_consec_win = 0
+
+    gross_pnls = [t.get("gross_pnl", t["net_pnl"]) for t in trades]
+    total_charges_list = [t.get("total_charges", 0.0) for t in trades]
+    gross_pnl = round(sum(gross_pnls), 2)
+    total_charges = round(sum(total_charges_list), 2)
+
+    avg_win = round(float(np.mean(winning_trades)), 2) if winning_trades else 0.0
+    avg_loss = round(float(np.mean([abs(x) for x in losing_trades])), 2) if losing_trades else 0.0
+    win_loss_ratio = round(avg_win / avg_loss, 2) if avg_loss > 0 else 0.0
+    loss_rate = 100.0 - win_rate
+    expectancy = round(((win_rate / 100.0) * avg_win) - ((loss_rate / 100.0) * avg_loss), 2)
+    calmar_ratio = round(net_return_pct / max_dd_pct, 2) if max_dd_pct > 0 else 0.0
 
     return {
         "initial_capital": round(initial_capital, 2),
         "final_equity": final_equity,
         "net_pnl": net_pnl,
+        "gross_pnl": gross_pnl,
+        "total_charges": total_charges,
         "net_return_percent": net_return_pct,
         "total_trades": total_trades,
         "winning_trades": win_count,
         "losing_trades": loss_count,
         "win_rate": win_rate,
         "profit_factor": profit_factor,
+        "expectancy": expectancy,
+        "avg_win": avg_win,
+        "avg_loss": avg_loss,
+        "win_loss_ratio": win_loss_ratio,
         "max_drawdown": round(max_dd, 2),
         "max_drawdown_percent": round(max_dd_pct, 2),
         "sharpe_ratio": sharpe,
         "sortino_ratio": sortino,
+        "calmar_ratio": calmar_ratio,
         "avg_trade_pnl": round(float(np.mean(pnls)), 2),
-        "max_consecutive_losses": max_consec_losses
+        "max_consecutive_losses": max_consec_losses,
+        "max_consecutive_wins": max_consec_wins
     }

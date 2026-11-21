@@ -179,7 +179,7 @@ export interface StrategyParam {
 }
 
 export interface StrategyDefinition {
-  id: string;
+  id: string | number;
   name: string;
   description: string;
   default_symbol?: string;
@@ -191,6 +191,18 @@ export interface StrategyDefinition {
   slippage_pct?: number;
   brokerage_per_order?: number;
   parameters: StrategyParam;
+  instrument?: string;
+  timeframe?: string;
+  lots?: number;
+  fast_ema?: number;
+  slow_ema?: number;
+  stop_loss?: number;
+  target?: number;
+  max_trades_per_day?: number;
+  schedule_start?: string;
+  schedule_end?: string;
+  mode?: string;
+  status?: string;
 }
 
 export interface TradeRecord {
@@ -212,8 +224,10 @@ export interface TradeRecord {
 export interface EquityPoint {
   timestamp: string;
   equity: number;
-  cash: number;
-  close_price: number;
+  cash?: number;
+  close_price?: number;
+  drawdown?: number;
+  drawdown_percent?: number;
 }
 
 export interface BacktestMetrics {
@@ -232,6 +246,14 @@ export interface BacktestMetrics {
   sortino_ratio: number;
   avg_trade_pnl: number;
   max_consecutive_losses: number;
+  gross_pnl?: number;
+  total_charges?: number;
+  avg_win?: number;
+  avg_loss?: number;
+  win_loss_ratio?: number;
+  expectancy?: number;
+  calmar_ratio?: number;
+  max_consecutive_wins?: number;
 }
 
 export interface BacktestDailyPnL {
@@ -245,6 +267,7 @@ export interface BacktestMonthlyPnL {
   pnl: number;
   trades: number;
   win_rate: number;
+  return_pct?: number;
 }
 
 export interface BacktestReport {
@@ -261,6 +284,10 @@ export interface BacktestReport {
   equity_curve: EquityPoint[];
   daily_pnl?: BacktestDailyPnL[];
   monthly_pnl?: BacktestMonthlyPnL[];
+  dow_pnl?: { day: string; pnl: number; trades: number }[];
+  data_source?: string;
+  candles_processed?: number;
+  execution_time_ms?: number;
 }
 
 export interface AdminUserItem {

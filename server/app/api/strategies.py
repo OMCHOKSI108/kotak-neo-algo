@@ -41,6 +41,69 @@ class StrategyResponse(BaseModel):
     last_signal: Optional[str] = None
     last_signal_time: Optional[datetime] = None
     last_run_time: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    createdAt: Optional[datetime] = None
+    parameters: Optional[Dict[str, Any]] = None
+    default_symbol: Optional[str] = None
+    default_timeframe: Optional[str] = None
+    default_lot_size: Optional[int] = None
+    default_num_lots: Optional[int] = None
+    asset: Optional[str] = None
+    lotSize: Optional[int] = None
+
+
+def serialize_strategy(s: Strategy) -> Dict[str, Any]:
+    lot_size = 25 if "NIFTY" in s.instrument.upper() and "BANK" not in s.instrument.upper() else (15 if "BANKNIFTY" in s.instrument.upper() else (10 if "SENSEX" in s.instrument.upper() else 1))
+    params = {
+        "fast_ema": s.fast_ema,
+        "slow_ema": s.slow_ema,
+        "stop_loss_pts": s.stop_loss,
+        "target_pts": s.target,
+        "max_trades_per_day": s.max_trades_per_day,
+        "schedule_start": s.schedule_start,
+        "schedule_end": s.schedule_end,
+        "option_type": s.option_type,
+        "strike_selection": s.strike_selection
+    }
+    if s.config and isinstance(s.config, dict):
+        params.update(s.config)
+
+    return {
+        "id": s.id,
+        "name": s.name,
+        "description": s.description or "",
+        "instrument": s.instrument,
+        "asset": s.instrument,
+        "timeframe": s.timeframe,
+        "mode": s.mode,
+        "status": s.status,
+        "fast_ema": s.fast_ema,
+        "slow_ema": s.slow_ema,
+        "option_type": s.option_type,
+        "strike_selection": s.strike_selection,
+        "lots": s.lots,
+        "stop_loss": s.stop_loss,
+        "target": s.target,
+        "max_trades_per_day": s.max_trades_per_day,
+        "schedule_start": s.schedule_start,
+        "schedule_end": s.schedule_end,
+        "today_pnl": s.today_pnl,
+        "total_pnl": s.total_pnl,
+        "trades_count": s.trades_count,
+        "win_rate": s.win_rate,
+        "max_drawdown": s.max_drawdown,
+        "last_signal": s.last_signal,
+        "last_signal_time": s.last_signal_time,
+        "last_run_time": s.last_run_time,
+        "created_at": s.created_at,
+        "createdAt": s.created_at,
+        "parameters": params,
+        "default_symbol": s.instrument,
+        "default_timeframe": s.timeframe,
+        "default_lot_size": lot_size,
+        "default_num_lots": s.lots,
+        "lotSize": lot_size,
+    }
 
 
 class CreateStrategyRequest(BaseModel):
@@ -124,7 +187,7 @@ async def list_user_strategies(
     await ensure_default_strategy(user.id, db)
     stmt = select(Strategy).where(Strategy.user_id == user.id).order_by(Strategy.id.asc())
     res = await db.execute(stmt)
-    return res.scalars().all()
+    return [serialize_strategy(s) for s in res.scalars().all()]
 
 
 @router.post("", response_model=StrategyResponse)

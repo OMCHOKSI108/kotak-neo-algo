@@ -137,7 +137,7 @@ export const api = {
   getBrokerProfile: (): Promise<BrokerProfile> => request('/broker/profile'),
 
   // Backtest
-  getStrategies: (): Promise<StrategyDefinition[]> => request('/backtest/strategies'),
+  getStrategies: (): Promise<StrategyDefinition[]> => request('/strategies'),
 
   getDatasets: (): Promise<string[]> => request('/backtest/datasets'),
 

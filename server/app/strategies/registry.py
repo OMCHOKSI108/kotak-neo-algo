@@ -18,8 +18,20 @@ STRATEGY_JSON_PATH = Path(__file__).resolve().parent / "strategy.json"
 
 
 def get_strategy(strategy_id: str) -> Optional[BaseStrategy]:
-    """Retrieve strategy implementation instance by id."""
-    return STRATEGY_MAP.get(strategy_id)
+    """Retrieve strategy implementation instance by id, slug, or name."""
+    s_key = str(strategy_id).strip().lower()
+    if s_key in STRATEGY_MAP:
+        return STRATEGY_MAP[s_key]
+
+    # Check for name/keyword matches
+    for k, v in STRATEGY_MAP.items():
+        if k in s_key or s_key in k:
+            return v
+        if v.name.lower() in s_key or s_key in v.name.lower():
+            return v
+
+    # Fallback to default index EMA strategy
+    return STRATEGY_MAP.get("nifty_9_15_ema")
 
 
 def list_strategies() -> List[Dict[str, Any]]:

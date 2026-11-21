@@ -165,12 +165,34 @@ export const OptionChainPage: React.FC<OptionChainPageProps> = ({
   const handleJumpToStrike = (strikeStr: string) => {
     setSelectedStrikeJump(strikeStr);
     if (!strikeStr || strikeStr === 'all') return;
-    const el = document.getElementById(`strike-row-${strikeStr}`);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el.classList.add('bg-blue-100');
-      setTimeout(() => el.classList.remove('bg-blue-100'), 1500);
+
+    const targetVal = parseFloat(strikeStr);
+    const isVisible = displayedStrikes.some((s) => Math.abs(s.strike_price - targetVal) < 0.01);
+
+    if (!isVisible) {
+      // Auto-expand filter to all strikes so the selected strike is rendered in the DOM
+      setStrikeFilter('all');
     }
+
+    // Wait for state change and table re-render
+    const delay = isVisible ? 60 : 300;
+    setTimeout(() => {
+      let el = document.getElementById(`strike-row-${strikeStr}`);
+      if (!el && !isNaN(targetVal)) {
+        el = document.getElementById(`strike-row-${targetVal}`);
+      }
+      if (!el && !isNaN(targetVal)) {
+        el = document.querySelector(`[data-strike="${targetVal}"]`);
+      }
+
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('bg-amber-200', 'ring-2', 'ring-amber-500');
+        setTimeout(() => {
+          el?.classList.remove('bg-amber-200', 'ring-2', 'ring-amber-500');
+        }, 2200);
+      }
+    }, delay);
   };
 
   const formatNum = (val?: number | null) => {
@@ -521,6 +543,7 @@ export const OptionChainPage: React.FC<OptionChainPageProps> = ({
                     <React.Fragment key={s.strike_price}>
                       <tr
                         id={`strike-row-${s.strike_price}`}
+                        data-strike={s.strike_price}
                         className={`transition-colors ${
                           isAtm ? 'font-bold' : ''
                         }`}

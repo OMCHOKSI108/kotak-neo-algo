@@ -478,7 +478,7 @@ export const StrategiesPage: React.FC<StrategiesPageProps> = ({ user, onNavigate
                     {/* One-Click Backtest Button */}
                     {onNavigateBacktest && (
                       <button
-                        onClick={() => onNavigateBacktest(strat.name)}
+                        onClick={() => onNavigateBacktest(strat.id.toString())}
                         className="flex items-center space-x-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-semibold transition-colors shadow-2xs"
                         title="Run One-Click Backtest"
                       >
