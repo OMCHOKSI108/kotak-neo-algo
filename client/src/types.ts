@@ -83,10 +83,31 @@ export interface BrokerAccount {
   account_name: string;
   status: 'CONNECTED' | 'DISCONNECTED' | 'FAILED';
   is_connected: boolean;
+  is_active?: boolean;
   last_authenticated_at?: string;
   last_heartbeat_at?: string;
   masked_identifier: string;
   session_metadata?: Record<string, any>;
+}
+
+export interface BrokerStatusItem {
+  id: string;
+  label: string;
+  brokerType: 'kotak_neo' | 'upstox' | 'fyers' | 'dhan' | string;
+  source: 'ENV' | 'DATABASE';
+  isPrimary: boolean;
+  authState: 'ACTIVE' | 'EXPIRED' | 'ERROR';
+  expiresAt?: string | null;
+  availableMargin: number;
+  maskedIdentifier?: string | null;
+  accountName?: string | null;
+  details?: Record<string, any>;
+}
+
+export interface EnvAuthResponse {
+  success: boolean;
+  message: string;
+  broker?: BrokerStatusItem | null;
 }
 
 export interface SanitizedBrokerConnectResponse {

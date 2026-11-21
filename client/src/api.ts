@@ -4,7 +4,7 @@ import {
   AdminUserItem, AuditLogItem, SanitizedBrokerConnectResponse,
   UserTradingSettings, StrategyItem, TraderOrderRequest,
   TraderOrderResponse, TraderPositionsSummary, TraderOrderItem,
-  AnalyticsSummary, SymbolSearchResult
+  AnalyticsSummary, SymbolSearchResult, BrokerStatusItem, EnvAuthResponse
 } from './types';
 
 const API_BASE = '/api';
@@ -78,7 +78,15 @@ export const api = {
     return request(url);
   },
 
-  // Broker Accounts
+  // Broker Accounts & Multi-Broker Status
+  getBrokersStatus: (): Promise<BrokerStatusItem[]> => request('/brokers/status'),
+
+  authenticateEnvBroker: (totp: string): Promise<EnvAuthResponse> =>
+    request('/brokers/env/authenticate', {
+      method: 'POST',
+      body: JSON.stringify({ totp }),
+    }),
+
   getBrokerAccounts: (): Promise<BrokerAccount[]> => request('/brokers/accounts'),
 
   connectBroker: (data: any): Promise<SanitizedBrokerConnectResponse> =>
@@ -87,19 +95,25 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  disconnectBroker: (accountId: number): Promise<{ success: boolean; message: string }> =>
+  activateBrokerAccount: (accountId: number | string): Promise<{ success: boolean; message: string }> =>
+    request(`/brokers/${accountId}/activate`, { method: 'POST' }),
+
+  deleteBrokerAccount: (accountId: number | string): Promise<{ success: boolean; message: string }> =>
+    request(`/brokers/${accountId}`, { method: 'DELETE' }),
+
+  disconnectBroker: (accountId: number | string): Promise<{ success: boolean; message: string }> =>
     request(`/brokers/${accountId}/disconnect`, { method: 'POST' }),
 
-  reconnectBroker: (accountId: number, totp?: string): Promise<SanitizedBrokerConnectResponse> =>
+  reconnectBroker: (accountId: number | string, totp?: string): Promise<SanitizedBrokerConnectResponse> =>
     request(`/brokers/${accountId}/reconnect`, {
       method: 'POST',
       body: JSON.stringify({ totp }),
     }),
 
-  adminDisconnectBroker: (accountId: number): Promise<{ success: boolean; message: string }> =>
+  adminDisconnectBroker: (accountId: number | string): Promise<{ success: boolean; message: string }> =>
     request(`/admin/brokers/${accountId}/disconnect`, { method: 'POST' }),
 
-  checkHeartbeat: (accountId: number): Promise<any> =>
+  checkHeartbeat: (accountId: number | string): Promise<any> =>
     request(`/broker/heartbeat/${accountId}`),
 
   getBrokerProfile: (): Promise<BrokerProfile> => request('/broker/profile'),
