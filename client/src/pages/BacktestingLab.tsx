@@ -345,6 +345,7 @@ export const BacktestingLab: React.FC<BacktestingLabProps> = ({ initialStrategy 
       ddPolylineStr,
       ddAreaStr,
       ddPts,
+      ddBottomPad,
       maxDD
     };
   }, [report]);

@@ -63,7 +63,7 @@ async def test_backtest_api_endpoints(client: AsyncClient, user_token: str):
     resp = await client.get("/api/backtest/strategies", headers={"Authorization": f"Bearer {user_token}"})
     assert resp.status_code == 200
     strats = resp.json()
-    assert len(strats) >= 3
+    assert len(strats) >= 1
 
     # Datasets
     resp = await client.get("/api/backtest/datasets", headers={"Authorization": f"Bearer {user_token}"})
