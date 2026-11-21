@@ -40,6 +40,7 @@ export const BrokerSettingsPage: React.FC<BrokerSettingsPageProps> = ({ user }) 
   const [refreshingMargin, setRefreshingMargin] = useState(false);
   const [adminTotp, setAdminTotp] = useState('');
   const [adminAuthLoading, setAdminAuthLoading] = useState(false);
+  const [showAdminReauth, setShowAdminReauth] = useState(false);
 
   const handleAdminTotpConnect = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,6 +59,7 @@ export const BrokerSettingsPage: React.FC<BrokerSettingsPageProps> = ({ user }) 
       if (res.success) {
         setSuccessMsg(res.message || 'Kotak Neo 2FA session connected successfully!');
         setAdminTotp('');
+        setShowAdminReauth(false);
         await loadAccountsAndProfile();
       } else {
         setError(res.message || 'Authentication failed. Please verify your TOTP.');
@@ -283,29 +285,30 @@ export const BrokerSettingsPage: React.FC<BrokerSettingsPageProps> = ({ user }) 
                   <h3 className="text-base font-bold text-gray-900 font-sans">
                     Kotak Neo Live Gateway
                   </h3>
-                  <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase tracking-wider font-mono">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    Connected via .env
-                  </span>
+                  {profile?.is_live ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase tracking-wider font-mono">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      2FA Active for Today
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 uppercase tracking-wider font-mono">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                      2FA Required for Today
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-gray-500 font-medium mt-0.5">
-                  SuperAdmin credentials securely configured in server environment (<code className="text-blue-700 font-mono font-bold">.env</code>). Automated order execution and streaming quotes active.
+                  {profile?.is_live
+                    ? 'SuperAdmin credentials configured via .env. Live broker session is verified and authenticated for today.'
+                    : 'SuperAdmin credentials loaded from server .env. Enter today’s 6-digit TOTP below to activate live trading.'}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <button
-                type="button"
-                onClick={() => setShowConfigForm(!showConfigForm)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors shadow-2xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>{showConfigForm ? 'Hide Form' : 'Add / Change Broker'}</span>
-              </button>
-              <button
                 onClick={loadAccountsAndProfile}
                 disabled={loading}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 transition-colors shadow-2xs"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 transition-colors shadow-2xs cursor-pointer"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
                 <span>Verify Session</span>
@@ -340,7 +343,7 @@ export const BrokerSettingsPage: React.FC<BrokerSettingsPageProps> = ({ user }) 
                 type="button"
                 onClick={handleRefreshMargin}
                 disabled={refreshingMargin}
-                className="p-1 rounded hover:bg-gray-200 text-gray-500 transition-colors"
+                className="p-1 rounded hover:bg-gray-200 text-gray-500 transition-colors cursor-pointer"
                 title="Refresh Margin from Broker API"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${refreshingMargin ? 'animate-spin text-blue-600' : ''}`} />
@@ -348,34 +351,53 @@ export const BrokerSettingsPage: React.FC<BrokerSettingsPageProps> = ({ user }) 
             </div>
           </div>
 
-          {/* Quick 2FA TOTP Bar for SuperAdmin */}
-          <form onSubmit={handleAdminTotpConnect} className="p-3 rounded-xl bg-blue-50/60 border border-blue-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2.5">
-              <Key className="w-4 h-4 text-blue-600 shrink-0" />
-              <div>
-                <span className="font-bold text-gray-900 block">Daily SEBI 2FA Authentication</span>
-                <span className="text-[11px] text-gray-500 block">Enter 6-digit TOTP code from your authenticator app to activate live broker session</span>
+          {/* Quick 2FA TOTP Bar: Shows TOTP input if auth required or if re-authenticating; shows Active state if auth done */}
+          {(!profile?.is_live || showAdminReauth) ? (
+            <form onSubmit={handleAdminTotpConnect} className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2.5">
+                <Key className="w-4 h-4 text-amber-600 shrink-0" />
+                <div>
+                  <span className="font-bold text-amber-900 block">Daily 2FA Authentication Required</span>
+                  <span className="text-[11px] text-amber-700 block">All credentials loaded from server .env. Enter 6-digit TOTP code to activate live trading.</span>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <input
-                type="text"
-                maxLength={6}
-                value={adminTotp}
-                onChange={(e) => setAdminTotp(e.target.value.replace(/\D/g, ''))}
-                placeholder="6-digit TOTP"
-                className="w-32 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-mono font-bold tracking-widest text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={adminTotp}
+                  onChange={(e) => setAdminTotp(e.target.value.replace(/\D/g, ''))}
+                  placeholder="6-digit TOTP"
+                  className="w-32 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-mono font-bold tracking-widest text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={adminAuthLoading || adminTotp.length !== 6}
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 transition-colors shadow-2xs whitespace-nowrap flex items-center gap-1.5 cursor-pointer"
+                >
+                  {adminAuthLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Lock className="w-3.5 h-3.5" />}
+                  <span>Authorize & Activate Live</span>
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <div>
+                  <span className="font-bold text-emerald-900 block">Kotak Neo Live Session Active</span>
+                  <span className="text-[11px] text-emerald-700 block">Automated order execution active. Session authenticated for today.</span>
+                </div>
+              </div>
               <button
-                type="submit"
-                disabled={adminAuthLoading || adminTotp.length !== 6}
-                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 transition-colors shadow-2xs whitespace-nowrap flex items-center gap-1.5"
+                type="button"
+                onClick={() => setShowAdminReauth(true)}
+                className="text-xs font-semibold text-emerald-800 hover:text-emerald-950 underline shrink-0 cursor-pointer"
               >
-                {adminAuthLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Lock className="w-3.5 h-3.5" />}
-                <span>Authorize 2FA</span>
+                Re-authenticate / Refresh 2FA
               </button>
             </div>
-          </form>
+          )}
         </div>
       )}
 
@@ -595,8 +617,8 @@ export const BrokerSettingsPage: React.FC<BrokerSettingsPageProps> = ({ user }) 
         </div>
       )}
 
-      {/* CASE 2: INPUT AREA FOR API TOKENS / RECONFIGURE FORM */}
-      {(!hasConnected || showConfigForm) && (
+      {/* CASE 2: INPUT AREA FOR API TOKENS / RECONFIGURE FORM (Only for standard users without account or explicit toggle) */}
+      {((!isSuperAdmin && !hasConnected) || showConfigForm) && (
         <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
             <div>

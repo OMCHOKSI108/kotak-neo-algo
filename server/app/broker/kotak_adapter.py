@@ -444,11 +444,22 @@ class KotakNeoAdapter(BrokerAdapter):
 
         loop = asyncio.get_running_loop()
         avail, used, collateral, cash = 0.0, 0.0, 0.0, 0.0
+        is_live_session = False
         try:
             limits_resp = await loop.run_in_executor(None, self._client.limits)
-            avail, used, collateral, cash = self._parse_kotak_limits(limits_resp)
+            resp_str = str(limits_resp)
+            if "Complete the 2fa" in resp_str or "unauthorized" in resp_str.lower() or "Invalid" in resp_str:
+                logger.warning("Kotak Neo session requires 2FA authentication: %s", limits_resp)
+                self._connected = False
+                is_live_session = False
+            else:
+                avail, used, collateral, cash = self._parse_kotak_limits(limits_resp)
+                self._connected = True
+                is_live_session = True
         except Exception as e:
             logger.error("Error fetching Kotak profile/limits: %s", e)
+            self._connected = False
+            is_live_session = False
 
         return BrokerProfile(
             client_id=str(client_id),
@@ -458,7 +469,7 @@ class KotakNeoAdapter(BrokerAdapter):
             used_margin=round(used, 2),
             collateral=round(collateral, 2),
             cash=round(cash, 2),
-            is_live=True
+            is_live=is_live_session
         )
 
     def _get_or_create_sdk_client(self) -> Optional[Any]:
