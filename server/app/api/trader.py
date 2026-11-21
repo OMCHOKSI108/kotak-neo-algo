@@ -42,6 +42,13 @@ INDEX_LOT_SIZES: Dict[str, int] = {
 
 
 def get_symbol_lot_size(symbol: str) -> int:
+    try:
+        from app.market.scrip_manager import scrip_manager
+        rec = scrip_manager.get_instrument_by_symbol(symbol)
+        if rec and rec.get("lot_size") and int(rec["lot_size"]) > 0:
+            return int(rec["lot_size"])
+    except Exception:
+        pass
     sym_upper = symbol.upper()
     if "BANK" in sym_upper:
         return INDEX_LOT_SIZES["BANKNIFTY"]
@@ -241,6 +248,25 @@ async def place_trader_order(
     """
     t_order_start = time.perf_counter_ns()
     s = await get_or_create_user_settings(user.id, db)
+
+    # 0. Reject non-tradable spot indices
+    raw_sym = req.symbol.strip().upper()
+    spot_indices = {"NIFTY", "NIFTY 50", "BANKNIFTY", "BANK NIFTY", "SENSEX", "FINNIFTY", "MIDCPNIFTY"}
+    is_idx = raw_sym in spot_indices
+    if not is_idx:
+        try:
+            from app.market.scrip_manager import scrip_manager
+            rec = scrip_manager.get_instrument_by_symbol(raw_sym)
+            if rec and rec.get("instrument_type") == "IDX":
+                is_idx = True
+        except Exception:
+            pass
+
+    if is_idx:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"'{req.symbol}' is a non-tradable spot index. Please select a Futures (FUT), Options (CE/PE), or Equity (EQ) contract."
+        )
     
     # 1. Check Circuit Breaker / Trading Halt
     if s.is_trading_halted:

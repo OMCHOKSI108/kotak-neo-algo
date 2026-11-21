@@ -49,9 +49,12 @@ async def test_trader_lot_sizes_endpoint(client: AsyncClient, user_token: str):
 async def test_paper_order_execution_and_positions(client: AsyncClient, user_token: str):
     headers = {"Authorization": f"Bearer {user_token}"}
 
+    import uuid
+    test_symbol = f"NIFTY26OCT22400CE_{uuid.uuid4().hex[:6].upper()}"
+
     # Place a paper BUY order
     order_payload = {
-        "symbol": "NIFTY26OCT22400CE",
+        "symbol": test_symbol,
         "exchange": "NSE",
         "side": "BUY",
         "order_type": "MARKET",
@@ -75,7 +78,7 @@ async def test_paper_order_execution_and_positions(client: AsyncClient, user_tok
     assert orders_resp.status_code == 200
     orders = orders_resp.json()
     assert len(orders) >= 1
-    assert any(o["symbol"] == "NIFTY26OCT22400CE" for o in orders)
+    assert any(o["symbol"] == test_symbol for o in orders)
 
     # Check positions list
     pos_resp = await client.get("/api/trader/positions", headers=headers)
@@ -83,7 +86,7 @@ async def test_paper_order_execution_and_positions(client: AsyncClient, user_tok
     pos_data = pos_resp.json()
     positions = pos_data["positions"]
     assert len(positions) >= 1
-    target_pos = next((p for p in positions if p["symbol"] == "NIFTY26OCT22400CE"), None)
+    target_pos = next((p for p in positions if p["symbol"] == test_symbol and p["status"] == "OPEN"), None)
     assert target_pos is not None
     assert target_pos["quantity"] == 65
     assert target_pos["status"] == "OPEN"
@@ -99,3 +102,20 @@ async def test_paper_order_execution_and_positions(client: AsyncClient, user_tok
     sq_pos = next((p for p in pos_after if p["id"] == target_pos["id"]), None)
     assert sq_pos is not None
     assert sq_pos["status"] == "CLOSED"
+
+
+@pytest.mark.asyncio
+async def test_spot_index_order_rejected(client: AsyncClient, user_token: str):
+    headers = {"Authorization": f"Bearer {user_token}"}
+    order_payload = {
+        "symbol": "NIFTY",
+        "exchange": "NSE",
+        "side": "BUY",
+        "order_type": "MARKET",
+        "product": "MIS",
+        "lots": 1,
+        "mode": "PAPER"
+    }
+    resp = await client.post("/api/trader/order", json=order_payload, headers=headers)
+    assert resp.status_code == 400
+    assert "non-tradable spot index" in resp.json()["detail"]

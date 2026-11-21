@@ -80,18 +80,18 @@ async def test_duplicate_order_intent_suppression(client: AsyncClient, user_toke
     are detected and rejected with HTTP 409 to prevent duplicate exchange fills.
     """
     from app.market.service import market_service
-    market_service._cached_quotes["NIFTY 50"] = Quote(
-        symbol="NIFTY 50", exchange="NSE", token="26000", ltp=24500.0, prev_close=24400.0
+    market_service._cached_quotes["INFY"] = Quote(
+        symbol="INFY", exchange="NSE", token="1594", ltp=1850.0, prev_close=1840.0
     )
 
     headers = {"Authorization": f"Bearer {user_token}"}
     payload = {
-        "symbol": "NIFTY 50",
+        "symbol": "INFY",
         "exchange": "NSE",
         "side": "BUY",
         "order_type": "MARKET",
         "product": "MIS",
-        "lots": 1,
+        "quantity": 10,
         "mode": "PAPER"
     }
 
