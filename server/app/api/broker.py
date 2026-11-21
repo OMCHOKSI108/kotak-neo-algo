@@ -139,15 +139,22 @@ async def connect_broker(
                 except Exception as e:
                     logger.warning("Could not derive TOTP from totp_secret: %s", e)
 
+        # Resolve credentials with fallback to server settings (.env) for superadmin/admin
+        ck = req.consumer_key or (settings.KOTAK_CONSUMER_KEY if user.role in ("superadmin", "admin") else None)
+        mob = req.mobile_number or (settings.KOTAK_MOBILE_NUMBER if user.role in ("superadmin", "admin") else None)
+        u_ucc = req.ucc or (settings.KOTAK_UCC if user.role in ("superadmin", "admin") else None)
+        mp = req.mpin or (settings.KOTAK_MPIN if user.role in ("superadmin", "admin") else None)
+        env = req.environment or settings.KOTAK_ENVIRONMENT
+
         # Validate Kotak Neo credentials
         creds = {
-            "consumer_key": req.consumer_key,
-            "mobile_number": req.mobile_number,
-            "ucc": req.ucc,
-            "mpin": req.mpin,
+            "consumer_key": ck,
+            "mobile_number": mob,
+            "ucc": u_ucc,
+            "mpin": mp,
             "totp": totp_val,
-            "totp_secret": req.totp_secret,
-            "environment": req.environment,
+            "totp_secret": req.totp_secret or (settings.KOTAK_TOTP_SECRET if user.role in ("superadmin", "admin") else None),
+            "environment": env,
         }
 
         try:
