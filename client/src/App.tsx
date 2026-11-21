@@ -218,42 +218,6 @@ export const App: React.FC = () => {
               brokerConnected={systemHealth?.is_connected ?? false}
             />
 
-            {/* Live Feed Pill */}
-            <div
-              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
-                isWsConnected && systemHealth?.is_connected
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                  : isWsConnected
-                  ? 'bg-amber-50 border-amber-200 text-amber-700'
-                  : 'bg-gray-50 border-gray-200 text-gray-500'
-              }`}
-            >
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  isWsConnected && systemHealth?.is_connected
-                    ? 'bg-emerald-500 animate-pulse'
-                    : isWsConnected
-                    ? 'bg-amber-400 animate-pulse'
-                    : 'bg-gray-400'
-                }`}
-              />
-              <span className="font-mono font-bold text-[10px] uppercase">
-                {isWsConnected && systemHealth?.is_connected
-                  ? 'Live (Kotak Neo)'
-                  : isWsConnected
-                  ? 'Simulated (Paper)'
-                  : 'Feed Offline'}
-              </span>
-            </div>
-
-            {/* Broker Status Pill */}
-            <div className="hidden sm:flex items-center space-x-1 px-2.5 py-1 rounded-full bg-gray-50 border border-gray-200 text-[10px] font-mono text-gray-700">
-              <span className="text-gray-400">Broker:</span>
-              <span className="font-bold">
-                {systemHealth?.is_connected ? 'Kotak Neo Live' : (user.role === 'superadmin' || user.role === 'admin') ? 'Configured (.env)' : 'Not Connected'}
-              </span>
-            </div>
-
             {/* Super Admin Quick + User Button */}
             {(user.role === 'superadmin' || user.role === 'admin') && (
               <button

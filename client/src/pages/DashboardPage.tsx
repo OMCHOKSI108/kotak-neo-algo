@@ -93,68 +93,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* 1. Real System Status Cards Header */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {/* Market Status */}
-        <div className="bg-white border border-gray-200 rounded-xl p-3.5 shadow-2xs">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Market</span>
-            <span className={`w-2 h-2 rounded-full ${marketOpen ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'}`} />
-          </div>
-          <div className="flex items-baseline space-x-1.5">
-            <span className={`text-sm font-bold ${marketOpen ? 'text-emerald-700' : 'text-gray-700'}`}>
-              {marketOpen ? 'OPEN (NSE/BSE)' : 'CLOSED'}
-            </span>
-          </div>
-          <p className="text-[10px] text-gray-500 mt-1">Normal trading hours: 09:15 - 15:30 IST</p>
-        </div>
 
-        {/* Data Feed */}
-        <div className="bg-white border border-gray-200 rounded-xl p-3.5 shadow-2xs">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Data Feed</span>
-            <span className={`w-2 h-2 rounded-full ${isWsConnected ? 'bg-emerald-500' : 'bg-red-500'}`} />
-          </div>
-          <div className="flex items-baseline space-x-1.5">
-            <span className={`text-sm font-bold ${isWsConnected ? 'text-emerald-700' : 'text-red-700'}`}>
-              {isWsConnected ? 'LIVE FEED ACTIVE' : 'OFFLINE'}
-            </span>
-          </div>
-          <p className="text-[10px] text-gray-500 mt-1">Direct Kotak Neo API stream</p>
-        </div>
-
-        {/* Broker Status */}
-        <div className="bg-white border border-gray-200 rounded-xl p-3.5 shadow-2xs">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Broker</span>
-            <span className={`w-2 h-2 rounded-full ${connectedBroker ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-          </div>
-          <div className="flex items-baseline space-x-1.5">
-            <span className={`text-sm font-bold ${connectedBroker ? 'text-emerald-700' : 'text-amber-700'}`}>
-              {connectedBroker ? 'KOTAK CONNECTED' : 'NOT CONNECTED'}
-            </span>
-          </div>
-          <p className="text-[10px] text-gray-500 mt-1">
-            {connectedBroker ? `UCC: ${connectedBroker.masked_identifier}` : 'Connect in Brokers page'}
-          </p>
-        </div>
-
-        {/* Algo Engine */}
-        <div className="bg-white border border-gray-200 rounded-xl p-3.5 shadow-2xs">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Algo Engine</span>
-            <span className={`w-2 h-2 rounded-full ${isAlgoRunning ? 'bg-blue-600 animate-pulse' : 'bg-gray-400'}`} />
-          </div>
-          <div className="flex items-baseline space-x-1.5">
-            <span className={`text-sm font-bold ${isAlgoRunning ? 'text-blue-700' : 'text-gray-700'}`}>
-              {isAlgoRunning ? `RUNNING (${runningStrategies.length})` : 'STOPPED'}
-            </span>
-          </div>
-          <p className="text-[10px] text-gray-500 mt-1">
-            Mode: {tradingSettings?.trading_mode || 'PAPER'}
-          </p>
-        </div>
-      </div>
 
       {/* 2. Major Indices Tickers */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
