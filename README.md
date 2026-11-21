@@ -53,11 +53,15 @@ flowchart TB
 
 ## Platform Visuals
 
-| Live Market Overview | Real-Time Option Chain |
+| Live Market Watchlist | Real-Time Option Chain |
 | :---: | :---: |
-| ![Market Overview](docs/images/market_overview.png) | ![Option Chain](docs/images/option_chain.png) |
-| **Quantitative Backtesting Lab** | **Encrypted Broker Connection** |
-| ![Backtesting Lab](docs/images/backtesting_lab.png) | ![Broker Setup](docs/images/broker_connect.png) |
+| ![Live Market Watchlist](docs/images/market_overview.png) | ![Real-Time Option Chain](docs/images/option_chain.png) |
+| **Quantitative Backtesting Lab** | **Encrypted Broker Gateway** |
+| ![Quantitative Backtesting Lab](docs/images/backtesting_lab.png) | ![Encrypted Broker Gateway](docs/images/broker_connect.png) |
+
+| Order Execution Ticket & Dynamic Multipliers |
+| :---: |
+| ![Order Execution Ticket](docs/images/trader_ticket.png) |
 
 ---
 

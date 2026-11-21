@@ -35,6 +35,9 @@ async def setup_db():
             )
             session.add(admin)
             await session.commit()
+        else:
+            admin.hashed_password = get_password_hash(settings.ADMIN_PASSWORD)
+            await session.commit()
 
     yield
     await test_engine.dispose()
