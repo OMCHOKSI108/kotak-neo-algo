@@ -196,27 +196,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <LogOut className="w-4 h-4" />
                 </button>
               </div>
-
-              {/* Feed & Broker Status Indicator */}
-              <div className="p-2 bg-white rounded-lg border border-gray-200 text-[10px] font-mono space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Market Feed:</span>
-                  <span className={`font-bold flex items-center gap-1 ${
-                    isWsConnected && isBrokerConnected ? 'text-emerald-600' : isWsConnected ? 'text-amber-600' : 'text-red-600'
-                  }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${
-                      isWsConnected && isBrokerConnected ? 'bg-emerald-500 animate-pulse' : isWsConnected ? 'bg-amber-400' : 'bg-red-500'
-                    }`} />
-                    {isWsConnected && isBrokerConnected ? 'Live Kotak' : isWsConnected ? 'Paper Sim' : 'Offline'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Broker:</span>
-                  <span className="font-bold text-gray-700">
-                    {isBrokerConnected ? 'Kotak Neo' : isSuperAdmin ? 'Configured (.env)' : 'Not Connected'}
-                  </span>
-                </div>
-              </div>
             </div>
           ) : (
             <div className="flex flex-col items-center space-y-2">

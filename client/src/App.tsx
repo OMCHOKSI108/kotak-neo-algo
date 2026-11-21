@@ -375,49 +375,6 @@ export const App: React.FC = () => {
         />
       )}
 
-      {/* Bottom Status Footer with Real Health Polling */}
-      <footer className="bg-white border-t border-gray-200 py-2.5 px-4 sm:px-6 lg:px-8 text-xs text-gray-500 flex flex-col sm:flex-row items-center justify-between space-y-2 sm:space-y-0">
-        <div className="flex items-center space-x-3 text-[11px] font-mono">
-          <div className="flex items-center space-x-1.5">
-            <span className={`w-2 h-2 rounded-full ${systemHealth ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`}></span>
-            <span className="text-gray-700">API {systemHealth ? 'Connected' : 'Connecting...'}</span>
-          </div>
-          <span className="text-gray-300">·</span>
-          <div className="flex items-center space-x-1.5">
-            {isWsConnected && systemHealth?.is_connected ? (
-              <>
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span className="text-gray-700">Feed Live (Kotak Neo)</span>
-              </>
-            ) : isWsConnected && !systemHealth?.is_connected ? (
-              <>
-                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-                <span className="text-gray-700">Feed Simulated (Paper)</span>
-              </>
-            ) : (
-              <>
-                <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                <span className="text-gray-700">Feed Offline</span>
-              </>
-            )}
-          </div>
-          <span className="text-gray-300">·</span>
-          <div className="flex items-center space-x-1.5">
-            <span className={`w-2 h-2 rounded-full ${systemHealth?.is_connected ? 'bg-emerald-500' : 'bg-gray-400'}`}></span>
-            <span className="text-gray-700">
-              Broker: {systemHealth?.is_connected ? (systemHealth.active_broker || 'Kotak Neo') : 'Not Connected'}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-center space-x-3 text-[11px]">
-          <span className={`font-semibold ${systemHealth?.trading_enabled ? 'text-amber-700' : 'text-gray-600'}`}>
-            {systemHealth?.trading_enabled ? 'Execution: LIVE BROKER OMS' : 'Safe Mode: Paper Simulation'}
-          </span>
-          <span className="text-gray-300">·</span>
-          <span className="text-gray-400 font-mono">NeoAlgo Trading Terminal</span>
-        </div>
-      </footer>
       </div>
     </div>
   );
