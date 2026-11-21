@@ -4,6 +4,30 @@ from unittest.mock import patch, AsyncMock
 from app.broker.kotak_neo import BrokerSession
 
 
+from app.core.config import settings
+
+
+@pytest.fixture(autouse=True)
+def setup_multi_broker_env():
+    orig_key = settings.KOTAK_CONSUMER_KEY
+    orig_mob = settings.KOTAK_MOBILE_NUMBER
+    orig_ucc = settings.KOTAK_UCC
+    orig_mpin = settings.KOTAK_MPIN
+    if not settings.KOTAK_CONSUMER_KEY:
+        settings.KOTAK_CONSUMER_KEY = "mock_consumer_key"
+    if not settings.KOTAK_MOBILE_NUMBER:
+        settings.KOTAK_MOBILE_NUMBER = "+919999999999"
+    if not settings.KOTAK_UCC:
+        settings.KOTAK_UCC = "TESTUCC01"
+    if not settings.KOTAK_MPIN:
+        settings.KOTAK_MPIN = "123456"
+    yield
+    settings.KOTAK_CONSUMER_KEY = orig_key
+    settings.KOTAK_MOBILE_NUMBER = orig_mob
+    settings.KOTAK_UCC = orig_ucc
+    settings.KOTAK_MPIN = orig_mpin
+
+
 @pytest.mark.asyncio
 async def test_get_brokers_status(client: AsyncClient, admin_token: str, user_token: str):
     # Admin checks status: should include .env broker

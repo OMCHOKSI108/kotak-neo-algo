@@ -20,6 +20,22 @@ TestSessionLocal = async_sessionmaker(bind=test_engine, class_=AsyncSession, exp
 async def setup_db():
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    async with TestSessionLocal() as session:
+        stmt = select(User).where(User.email == settings.ADMIN_EMAIL)
+        res = await session.execute(stmt)
+        admin = res.scalar_one_or_none()
+        if not admin:
+            admin = User(
+                email=settings.ADMIN_EMAIL,
+                hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
+                full_name=settings.ADMIN_NAME,
+                role="superadmin",
+                is_active=True
+            )
+            session.add(admin)
+            await session.commit()
+
     yield
     await test_engine.dispose()
 

@@ -5,6 +5,18 @@ from app.broker.schemas import OrderRequest
 from app.core.config import settings
 
 
+@pytest.fixture(autouse=True)
+def setup_kotak_specs_environment():
+    orig_trading = settings.TRADING_ENABLED
+    orig_key = settings.KOTAK_CONSUMER_KEY
+    settings.TRADING_ENABLED = True
+    if not settings.KOTAK_CONSUMER_KEY:
+        settings.KOTAK_CONSUMER_KEY = "test_mock_consumer_key"
+    yield
+    settings.TRADING_ENABLED = orig_trading
+    settings.KOTAK_CONSUMER_KEY = orig_key
+
+
 @pytest.mark.asyncio
 async def test_kotak_neo_order_placement_exact_parameter_mapping():
     """

@@ -57,6 +57,10 @@ jobs:
           BROKER_ENCRYPTION_KEY: 3d115d4341000b58bd19a63509aa4235d548e3f092e205660847c961f52163da
           ADMIN_EMAIL: omchoksi99@gmail.com
           ADMIN_PASSWORD: superadminpass
+          KOTAK_CONSUMER_KEY: test_mock_consumer_key
+          KOTAK_MOBILE_NUMBER: "+919999999999"
+          KOTAK_UCC: TESTUCC01
+          KOTAK_MPIN: "123456"
           TRADING_ENABLED: "false"
         run: |
           pytest -v --tb=short
