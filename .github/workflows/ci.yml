@@ -38,7 +38,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           cache: 'pip'
           cache-dependency-path: server/requirements.txt
 
@@ -52,7 +52,9 @@ jobs:
           ENVIRONMENT: test
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5435/algo_trading
           SECRET_KEY: test-secret-key-32-chars-long-minimum-length-requirement
+          JWT_SECRET_KEY: test-jwt-secret-key-for-ci-pipeline-2026
           ENCRYPTION_KEY: uB8pM4sX_kL2nQ9vW1zY5rT3eA7cE6gI8oK0mJ4lH2A=
+          BROKER_ENCRYPTION_KEY: 3d115d4341000b58bd19a63509aa4235d548e3f092e205660847c961f52163da
           ADMIN_EMAIL: omchoksi99@gmail.com
           ADMIN_PASSWORD: superadminpass
           TRADING_ENABLED: "false"

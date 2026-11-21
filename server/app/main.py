@@ -6,10 +6,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.db.init_db import init_db
 from app.market.service import market_service
+from app.market.scrip_manager import scrip_manager
 from app.api.auth import router as auth_router
 from app.api.admin import router as admin_router
 from app.api.broker import router as broker_router
 from app.api.market import router as market_router
+from app.api.instruments import router as instruments_router
+from app.api.watchlist import router as watchlist_router
 from app.api.backtest import router as backtest_router
 from app.api.trader import router as trader_router
 from app.api.strategies import router as strategies_router
@@ -26,12 +29,15 @@ from app.core.telemetry import execution_metrics
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan: database initialization, telemetry monitoring, and background market service startup."""
+    """Application lifespan: database initialization, telemetry monitoring, background scrip indexing, and market service startup."""
     logger.info("Starting %s in %s mode...", settings.APP_NAME, settings.APP_ENV)
     # Initialize database tables and bootstrap admin
     await init_db()
     # Start execution metrics and event loop monitor
     await execution_metrics.start_event_loop_monitor()
+    # Start background scrip master download/cache
+    import asyncio
+    asyncio.create_task(scrip_manager.initialize())
     # Start market data background streaming
     await market_service.start()
     yield
@@ -60,6 +66,8 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(broker_router, prefix="/api")
 app.include_router(market_router, prefix="/api")
+app.include_router(instruments_router, prefix="/api")
+app.include_router(watchlist_router, prefix="/api")
 app.include_router(backtest_router, prefix="/api")
 app.include_router(trader_router, prefix="/api")
 app.include_router(strategies_router, prefix="/api")

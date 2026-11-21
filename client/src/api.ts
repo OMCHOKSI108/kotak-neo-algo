@@ -4,7 +4,8 @@ import {
   AdminUserItem, AuditLogItem, SanitizedBrokerConnectResponse,
   UserTradingSettings, StrategyItem, TraderOrderRequest,
   TraderOrderResponse, TraderPositionsSummary, TraderOrderItem,
-  AnalyticsSummary, SymbolSearchResult, BrokerStatusItem, EnvAuthResponse
+  AnalyticsSummary, SymbolSearchResult, BrokerStatusItem, EnvAuthResponse,
+  InstrumentSearchResult, WatchlistItem
 } from './types';
 
 const API_BASE = '/api';
@@ -77,6 +78,23 @@ export const api = {
     if (exchange) url += `&exchange=${encodeURIComponent(exchange)}`;
     return request(url);
   },
+
+  searchInstruments: (q: string, segment?: string, limit: number = 20): Promise<InstrumentSearchResult[]> => {
+    let url = `/instruments/search?q=${encodeURIComponent(q)}&limit=${limit}`;
+    if (segment && segment !== 'all') url += `&segment=${encodeURIComponent(segment)}`;
+    return request(url);
+  },
+
+  getWatchlist: (): Promise<WatchlistItem[]> => request('/watchlist'),
+
+  addToWatchlist: (item: Partial<WatchlistItem> & { symbol: string }): Promise<{ success: boolean; message: string; item: WatchlistItem }> =>
+    request('/watchlist/add', {
+      method: 'POST',
+      body: JSON.stringify(item),
+    }),
+
+  removeFromWatchlist: (symbol: string): Promise<{ success: boolean; message: string }> =>
+    request(`/watchlist/${encodeURIComponent(symbol)}`, { method: 'DELETE' }),
 
   // Broker Accounts & Multi-Broker Status
   getBrokersStatus: (): Promise<BrokerStatusItem[]> => request('/brokers/status'),

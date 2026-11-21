@@ -63,6 +63,32 @@ class MarketDataService:
         except Exception as e:
             logger.error("Error starting MarketDataService: %s", e)
 
+    async def subscribe_symbol(self, symbol: str, exchange_segment: Optional[str] = None, token: Optional[str] = None) -> Quote:
+        """Subscribe to a new symbol dynamically and prime its quote snapshot immediately."""
+        s_clean = symbol.strip().upper()
+        try:
+            quotes = await self._adapter.get_quotes([s_clean])
+            quote = quotes[0] if quotes else Quote(symbol=s_clean, exchange="NSE", ltp=0.0, prev_close=0.0)
+            self._cached_quotes[s_clean] = quote
+            await self._adapter.subscribe_market_data([s_clean], self._on_tick)
+            # Notify connected UI clients immediately
+            await self._broadcast_tick(quote)
+            return quote
+        except Exception as e:
+            logger.warning("Error dynamically subscribing symbol %s: %s", s_clean, e)
+            q_fallback = Quote(symbol=s_clean, exchange="NSE", ltp=0.0, prev_close=0.0)
+            self._cached_quotes[s_clean] = q_fallback
+            return q_fallback
+
+    async def unsubscribe_symbol(self, symbol: str) -> None:
+        """Unsubscribe a symbol and remove from memory cache."""
+        s_clean = symbol.strip().upper()
+        try:
+            await self._adapter.unsubscribe_market_data([s_clean])
+        except Exception as e:
+            logger.debug("Error unsubscribing symbol %s: %s", s_clean, e)
+        self._cached_quotes.pop(s_clean, None)
+
     def subscribe_strategy(self, callback: Callable[[Quote], Any]):
         """Register a trading strategy for immediate, zero-latency in-process tick notifications."""
         if callback not in self._strategy_subscribers:

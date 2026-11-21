@@ -90,28 +90,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
         }`}
       >
         {/* Brand & Collapse Header */}
-        <div className="h-14 px-4 border-b border-gray-200 flex items-center justify-between shrink-0">
-          <div className="flex items-center overflow-hidden">
-            {isOpen ? (
-              <button
-                onClick={() => setActiveTab('dashboard')}
-                className="focus:outline-none text-left cursor-pointer transition-opacity hover:opacity-95"
-              >
-                <KotakNeoLogo size="sm" />
-              </button>
-            ) : (
-              <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center font-black text-white text-xs shadow-2xs">
-                KN
-              </div>
-            )}
+        <div className={`h-14 border-b border-gray-200 flex items-center shrink-0 transition-all ${
+          isOpen ? 'px-4 justify-between' : 'px-1.5 justify-between'
+        }`}>
+          <div className="flex items-center shrink-0">
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className="focus:outline-none cursor-pointer transition-opacity hover:opacity-90 flex items-center shrink-0"
+              title="Kotak Neo Terminal"
+            >
+              <KotakNeoLogo size={isOpen ? 'sm' : 'xs'} />
+            </button>
           </div>
 
           <button
             onClick={onToggle}
-            className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+            className={`rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors shrink-0 ${
+              isOpen ? 'p-1.5' : 'p-1'
+            }`}
             title={isOpen ? 'Collapse Sidebar' : 'Expand Sidebar'}
           >
-            {isOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4 hidden lg:block" />}
+            {isOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-3.5 h-3.5" />}
           </button>
         </div>
 

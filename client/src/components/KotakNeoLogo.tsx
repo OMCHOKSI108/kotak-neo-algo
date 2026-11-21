@@ -2,7 +2,7 @@ import React from 'react';
 
 interface KotakNeoLogoProps {
   className?: string;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   showSubtitle?: boolean;
 }
 
@@ -10,22 +10,23 @@ export const KotakNeoLogo: React.FC<KotakNeoLogoProps> = ({
   className = '',
   size = 'md',
 }) => {
-  const heightMap = {
-    sm: 'h-6 sm:h-7',
-    md: 'h-8 sm:h-9',
-    lg: 'h-11 sm:h-12',
-    xl: 'h-14 sm:h-16',
+  const sizeMap = {
+    xs: 'w-6 h-6',
+    sm: 'w-7 h-7',
+    md: 'w-8 h-8',
+    lg: 'w-10 h-10',
+    xl: 'w-12 h-12',
   };
 
-  const imgHeight = heightMap[size];
+  const imgSize = sizeMap[size] || 'w-8 h-8';
 
   return (
-    <div className={`inline-flex items-center ${className}`}>
-      {/* Official Kotak Neo SVG */}
+    <div className={`inline-flex items-center shrink-0 ${className}`}>
+      {/* Official Kotak circular icon */}
       <img
-        src="/Kotak_Neo_Website_dark_mode.svg"
+        src="/favicon.svg"
         alt="Kotak Neo"
-        className={`${imgHeight} w-auto object-contain select-none`}
+        className={`${imgSize} object-contain select-none shrink-0`}
         loading="eager"
       />
     </div>

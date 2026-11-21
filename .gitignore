@@ -42,6 +42,8 @@ logs/
 server/logs/
 local_data/
 server/data/uploads/
+server/data/scrip_cache/
+data/scrip_cache/
 
 # IDE & Editor
 .vscode/

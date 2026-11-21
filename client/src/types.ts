@@ -45,6 +45,47 @@ export interface SymbolSearchResult {
   base_price?: number;
 }
 
+export interface InstrumentSearchResult {
+  symbol: string;
+  trading_symbol: string;
+  tradingSymbol: string;
+  name: string;
+  exchange: 'NSE' | 'BSE' | string;
+  exchange_segment: string;
+  exchangeSegment: string;
+  instrument_type: string;
+  instrumentType: string;
+  token: string;
+  instrumentToken: string;
+  pSymbol: string;
+  lot_size: number;
+  lotSize: number;
+  strike_price?: number | null;
+  strikePrice?: number | null;
+  expiry?: string | null;
+  tick_size?: number;
+}
+
+export interface WatchlistItem {
+  id: number;
+  symbol: string;
+  trading_symbol: string;
+  tradingSymbol: string;
+  name?: string;
+  exchange: string;
+  exchange_segment: string;
+  exchangeSegment: string;
+  instrument_type: string;
+  instrumentType: string;
+  token?: string;
+  lot_size: number;
+  lotSize: number;
+  strike_price?: number | null;
+  strikePrice?: number | null;
+  expiry?: string | null;
+  created_at?: string;
+}
+
 export interface OptionContract {
   symbol: string;
   token?: string;

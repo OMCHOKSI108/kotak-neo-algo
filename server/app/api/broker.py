@@ -257,9 +257,16 @@ async def authenticate_env_broker(
             detail="Server .env is missing required Kotak Neo credentials (consumer key, mobile, UCC, or MPIN)."
         )
 
+    mob = (settings.KOTAK_MOBILE_NUMBER or "").strip()
+    if mob and not mob.startswith("+"):
+        if len(mob) == 10:
+            mob = f"+91{mob}"
+        elif len(mob) == 12 and mob.startswith("91"):
+            mob = f"+{mob}"
+
     creds = {
         "consumer_key": settings.KOTAK_CONSUMER_KEY,
-        "mobile_number": settings.KOTAK_MOBILE_NUMBER,
+        "mobile_number": mob,
         "ucc": settings.KOTAK_UCC,
         "mpin": settings.KOTAK_MPIN,
         "totp": totp_clean,
@@ -477,6 +484,13 @@ async def connect_broker(
         # Resolve credentials with fallback to server settings (.env) for superadmin/admin
         ck = req.consumer_key or (settings.KOTAK_CONSUMER_KEY if user.role in ("superadmin", "admin") else None)
         mob = req.mobile_number or (settings.KOTAK_MOBILE_NUMBER if user.role in ("superadmin", "admin") else None)
+        if mob:
+            mob = str(mob).strip()
+            if not mob.startswith("+"):
+                if len(mob) == 10:
+                    mob = f"+91{mob}"
+                elif len(mob) == 12 and mob.startswith("91"):
+                    mob = f"+{mob}"
         u_ucc = req.ucc or (settings.KOTAK_UCC if user.role in ("superadmin", "admin") else None)
         mp = req.mpin or (settings.KOTAK_MPIN if user.role in ("superadmin", "admin") else None)
         env = req.environment or settings.KOTAK_ENVIRONMENT

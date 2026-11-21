@@ -28,6 +28,7 @@ class User(Base):
     orders = relationship("OrderRecord", back_populates="user", cascade="all, delete-orphan")
     positions = relationship("PositionRecord", back_populates="user", cascade="all, delete-orphan")
     trades = relationship("TradeRecord", back_populates="user", cascade="all, delete-orphan")
+    watchlist_items = relationship("WatchlistItem", back_populates="user", cascade="all, delete-orphan")
 
 
 class BrokerAccount(Base):
@@ -290,3 +291,27 @@ class TradeRecord(Base):
 
     user = relationship("User", back_populates="trades")
     strategy = relationship("Strategy", back_populates="trades")
+
+
+class WatchlistItem(Base):
+    __tablename__ = "watchlist_items"
+    __table_args__ = (
+        Index("ix_watchlist_user_symbol", "user_id", "symbol", unique=True),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    symbol = Column(String(100), nullable=False)
+    trading_symbol = Column(String(100), nullable=False)
+    name = Column(String(250), nullable=True)
+    exchange = Column(String(20), default="NSE", nullable=False)
+    exchange_segment = Column(String(30), default="nse_cm", nullable=False)
+    instrument_type = Column(String(20), default="EQ", nullable=False)
+    token = Column(String(50), nullable=True)
+    lot_size = Column(Integer, default=1, nullable=False)
+    strike_price = Column(Float, nullable=True)
+    expiry = Column(String(50), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    user = relationship("User", back_populates="watchlist_items")
+

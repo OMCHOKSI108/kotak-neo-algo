@@ -101,6 +101,13 @@ async def login(credentials: Dict[str, Any]) -> BrokerSession:
 
     consumer_key = credentials["consumer_key"].strip()
     mobile = credentials["mobile_number"].strip()
+    if not mobile.startswith("+"):
+        if len(mobile) == 10:
+            mobile = f"+91{mobile}"
+        elif len(mobile) == 12 and mobile.startswith("91"):
+            mobile = f"+{mobile}"
+    credentials["mobile_number"] = mobile
+
     ucc = credentials["ucc"].strip().upper()
     mpin = credentials["mpin"].strip()
     totp = str(credentials["totp"]).strip()
@@ -151,7 +158,11 @@ async def login(credentials: Dict[str, Any]) -> BrokerSession:
         payload1 = data1.get("data") if isinstance(data1, dict) else None
         if resp1.status_code not in range(200, 300) or not isinstance(payload1, dict):
             error_msg = data1.get("message") or data1.get("Error") or "Invalid credentials or TOTP expired."
-            logger.warning("Kotak Neo Step 1 TOTP failed with HTTP %d", resp1.status_code)
+            if isinstance(data1, dict) and "error" in data1 and isinstance(data1["error"], list) and data1["error"]:
+                first_err = data1["error"][0]
+                if isinstance(first_err, dict) and first_err.get("message"):
+                    error_msg = first_err["message"]
+            logger.warning("Kotak Neo Step 1 TOTP failed with HTTP %d: %s", resp1.status_code, resp1.text)
             return BrokerSession(
                 broker="KOTAK_NEO",
                 status="FAILED",
