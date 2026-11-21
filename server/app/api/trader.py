@@ -98,6 +98,9 @@ class TraderOrderRequest(BaseModel):
     stop_loss: Optional[float] = None
     target: Optional[float] = None
     mode: Optional[str] = "PAPER"  # PAPER or LIVE
+    token: Optional[str] = None
+    exchange_segment: Optional[str] = None
+    ltp: Optional[float] = None
     client_order_id: Optional[str] = None
 
 
@@ -251,9 +254,13 @@ async def place_trader_order(
 
     # 0. Reject non-tradable spot indices
     raw_sym = req.symbol.strip().upper()
-    spot_indices = {"NIFTY", "NIFTY 50", "BANKNIFTY", "BANK NIFTY", "SENSEX", "FINNIFTY", "MIDCPNIFTY"}
+    spot_indices = {"NIFTY", "NIFTY 50", "BANKNIFTY", "BANK NIFTY", "SENSEX", "FINNIFTY", "MIDCPNIFTY", "INDIA VIX"}
     is_idx = raw_sym in spot_indices
-    if not is_idx:
+    is_derivative = (
+        any(raw_sym.endswith(suffix) for suffix in ("CE", "PE", "FUT"))
+        or " CE" in raw_sym or " PE" in raw_sym or " FUT" in raw_sym
+    )
+    if not is_idx and not is_derivative:
         try:
             from app.market.scrip_manager import scrip_manager
             rec = scrip_manager.get_instrument_by_symbol(raw_sym)
@@ -373,6 +380,30 @@ async def place_trader_order(
                 except Exception as e:
                     logger.warning("Could not get user-specific broker adapter for order: %s", e)
 
+        # Margin Guardrail: Verify live broker margin before execution
+        live_ref_price = req.price if (req.price and req.price > 0) else 0.0
+        if live_ref_price <= 0:
+            opt_q = market_service.get_cached_option_quote(req.symbol, req.token)
+            live_ref_price = opt_q.ltp if (opt_q and opt_q.ltp > 0) else (req.ltp or 0.0)
+        if live_ref_price <= 0:
+            quotes = await market_service.get_quotes([req.symbol])
+            if quotes and quotes[0].ltp > 0:
+                live_ref_price = quotes[0].ltp
+
+        estimated_order_value = qty * live_ref_price
+        try:
+            prof = await active_adapter.get_profile()
+            avail_margin = prof.available_margin if prof else 0.0
+            if avail_margin <= 0 or (estimated_order_value > 0 and avail_margin < estimated_order_value):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Insufficient broker margin: Required ₹{estimated_order_value:,.2f}, Available ₹{avail_margin:,.2f}. Live order blocked."
+                )
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.debug("Live margin pre-check skipped: %s", e)
+
         # Execute via active broker adapter
         broker_res = await active_adapter.place_order(
             OrderRequest(
@@ -441,10 +472,37 @@ async def place_trader_order(
         )
 
     # 3. Paper Trading Execution
-    # Fetch latest LTP for realistic price fill
-    quotes = await market_service.get_quotes([req.symbol])
-    current_ltp = quotes[0].ltp if quotes and quotes[0].ltp > 0 else (req.price or 100.0)
-    exec_price = req.price if (req.order_type == "LIMIT" and req.price) else current_ltp
+    # Fetch latest LTP for realistic price fill:
+    # 1. Direct LTP from client modal snapshot -> 2. Option Chain cache -> 3. Live quotes -> 4. Scrip master
+    current_ltp = 0.0
+
+    # 1. Request LTP passed directly from client modal snapshot
+    if req.ltp and req.ltp > 0:
+        current_ltp = req.ltp
+
+    # 2. Option Chain cache (instant and exact for option contracts)
+    if current_ltp <= 0:
+        opt_q = market_service.get_cached_option_quote(req.symbol, req.token)
+        if opt_q and opt_q.ltp > 0:
+            current_ltp = opt_q.ltp
+
+    # 3. Live ticks or adapter quotes
+    if current_ltp <= 0:
+        quotes = await market_service.get_quotes([req.symbol])
+        if quotes and quotes[0].ltp > 0:
+            current_ltp = quotes[0].ltp
+
+    if current_ltp <= 0:
+        rec = scrip_manager.get_instrument_by_symbol(req.symbol)
+        if rec and rec.get("strike_price"):
+            current_ltp = round(max(5.0, ((rec["strike_price"] % 1000) * 0.15) + 35.0), 2)
+        elif rec and rec.get("ltp"):
+            current_ltp = rec["ltp"]
+
+    if current_ltp <= 0:
+        current_ltp = req.price if (req.price and req.price > 0) else 100.0
+
+    exec_price = req.price if (req.order_type == "LIMIT" and req.price and req.price > 0) else current_ltp
 
     order_record = OrderRecord(
         user_id=user.id,

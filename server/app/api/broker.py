@@ -1156,6 +1156,7 @@ async def get_orders(user: User = Depends(get_current_user)):
 
 @router.post("/brokers/orders", response_model=OrderResult)
 @router.post("/broker/orders", response_model=OrderResult)
+@router.post("/orders", response_model=OrderResult)
 async def place_order(
     req: OrderRequest,
     db: AsyncSession = Depends(get_db),

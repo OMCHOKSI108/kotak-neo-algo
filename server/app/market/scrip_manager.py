@@ -384,8 +384,43 @@ class ScripMasterManager:
         return [InstrumentSearchResult(**r) for r in top_records]
 
     def get_instrument_by_symbol(self, symbol: str) -> Optional[Dict[str, Any]]:
-        """Retrieve instrument record by symbol or trading_symbol."""
-        return self._by_symbol.get(symbol.strip().upper())
+        """Retrieve instrument record by symbol, trading_symbol, or normalized key."""
+        import re
+        s_clean = symbol.strip().upper()
+        if s_clean in self._by_symbol:
+            return self._by_symbol[s_clean]
+
+        # Try spaceless (e.g. "NIFTY 25800 CE" -> "NIFTY25800CE")
+        s_spaceless = re.sub(r'\s+', '', s_clean)
+        if s_spaceless in self._by_symbol:
+            return self._by_symbol[s_spaceless]
+
+        # Try token lookup if symbol looks like a token or token with segment
+        if s_clean in self._by_token:
+            return self._by_token[s_clean]
+        for k, v in self._by_token.items():
+            if k.endswith(f"|{s_clean}") or k == s_clean:
+                return v
+
+        # Check spaceless equality
+        for k, v in self._by_symbol.items():
+            k_spaceless = re.sub(r'\s+', '', k)
+            if k_spaceless == s_spaceless:
+                return v
+
+        return None
+
+    def get_instrument_by_token(self, token: str, segment: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Retrieve instrument record by token and optional segment."""
+        tok_clean = token.strip()
+        if segment:
+            k = f"{segment.lower()}|{tok_clean}"
+            if k in self._by_token:
+                return self._by_token[k]
+        for k, v in self._by_token.items():
+            if k.endswith(f"|{tok_clean}") or k == tok_clean:
+                return v
+        return None
 
 
 # Global singleton scrip manager

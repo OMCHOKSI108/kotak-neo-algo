@@ -347,6 +347,9 @@ export interface TraderOrderRequest {
   stop_loss?: number;
   target?: number;
   mode?: 'PAPER' | 'LIVE';
+  token?: string;
+  exchange_segment?: string;
+  ltp?: number;
 }
 
 export interface TraderOrderResponse {

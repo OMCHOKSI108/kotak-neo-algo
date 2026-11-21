@@ -119,3 +119,87 @@ async def test_spot_index_order_rejected(client: AsyncClient, user_token: str):
     resp = await client.post("/api/trader/order", json=order_payload, headers=headers)
     assert resp.status_code == 400
     assert "non-tradable spot index" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_option_market_order_with_token_and_ltp(client: AsyncClient, user_token: str):
+    headers = {"Authorization": f"Bearer {user_token}"}
+    order_payload = {
+        "symbol": "NIFTY 25800 CE",
+        "token": "45678",
+        "exchange_segment": "nse_fo",
+        "side": "BUY",
+        "order_type": "MARKET",
+        "product": "MIS",
+        "lots": 1,
+        "ltp": 102.55,
+        "mode": "PAPER"
+    }
+    resp = await client.post("/api/trader/order", json=order_payload, headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    assert data["status"] == "EXECUTED"
+    assert data["mode"] == "PAPER"
+    assert data["price"] == 102.55
+
+
+@pytest.mark.asyncio
+async def test_live_order_rejected_when_insufficient_margin(client: AsyncClient, user_token: str):
+    from app.core.config import settings
+    from unittest.mock import AsyncMock, MagicMock
+    from app.market.service import market_service
+    from app.broker.schemas import BrokerProfile
+
+    headers = {"Authorization": f"Bearer {user_token}"}
+    order_payload = {
+        "symbol": "NIFTY 25800 CE",
+        "token": "45678",
+        "exchange_segment": "nse_fo",
+        "side": "BUY",
+        "order_type": "MARKET",
+        "product": "MIS",
+        "lots": 1,
+        "ltp": 102.55,
+        "mode": "LIVE"
+    }
+
+    # 1. Without TRADING_ENABLED, server safety guardrail blocks live order
+    order_payload1 = {**order_payload, "client_order_id": "test-live-guard-1"}
+    resp1 = await client.post("/api/trader/order", json=order_payload1, headers=headers)
+    assert resp1.status_code == 400
+    assert "Live execution is disabled by server safety guardrail" in resp1.json()["detail"]
+
+    # 2. With TRADING_ENABLED=True & live_trading_enabled=True, margin pre-check blocks order if margin is zero
+    orig_trading_enabled = settings.TRADING_ENABLED
+    orig_adapter = market_service.adapter
+    try:
+        settings.TRADING_ENABLED = True
+
+        # Enable live trading in user settings
+        await client.post("/api/trader/settings", json={"live_trading_enabled": True}, headers=headers)
+
+        # Mock adapter profile to return 0 margin
+        mock_profile = BrokerProfile(
+            client_id="TEST_UCC",
+            client_name="Test User",
+            broker_name="mock_broker",
+            available_margin=0.0,
+            used_margin=0.0,
+            cash=0.0,
+            is_live=True
+        )
+        mock_adapter = MagicMock()
+        mock_adapter.is_connected = True
+        mock_adapter.get_profile = AsyncMock(return_value=mock_profile)
+        market_service._adapter = mock_adapter
+
+        order_payload2 = {**order_payload, "client_order_id": "test-live-guard-2"}
+        resp2 = await client.post("/api/trader/order", json=order_payload2, headers=headers)
+        assert resp2.status_code == 400
+        assert "Insufficient broker margin" in resp2.json()["detail"]
+    finally:
+        settings.TRADING_ENABLED = orig_trading_enabled
+        market_service._adapter = orig_adapter
+
+

@@ -93,6 +93,9 @@ export const OptionTradeModal: React.FC<OptionTradeModalProps> = ({
         stop_loss: calculatedStopLoss,
         target: calculatedTarget,
         mode,
+        token: contract.token,
+        exchange_segment: contract.token?.includes('|') ? contract.token.split('|')[0] : (underlying.toUpperCase() === 'SENSEX' ? 'bse_fo' : 'nse_fo'),
+        ltp: contract.ltp,
       };
 
       const res = await api.placeTraderOrder(payload);
@@ -348,10 +351,12 @@ export const OptionTradeModal: React.FC<OptionTradeModalProps> = ({
           </div>
 
           {/* Insufficient Margin Warning in Live Mode */}
-          {mode === 'LIVE' && availableMargin !== null && estimatedMargin > availableMargin && (
-            <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-[11px] flex items-center gap-1.5 font-medium">
-              <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              <span>Available margin (₹{availableMargin.toLocaleString('en-IN')}) is lower than needed (₹{estimatedMargin.toLocaleString('en-IN')}).</span>
+          {mode === 'LIVE' && availableMargin !== null && (availableMargin <= 0 || estimatedMargin > availableMargin) && (
+            <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center gap-2 font-medium">
+              <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>
+                Available broker margin (₹{availableMargin.toLocaleString('en-IN')}) is insufficient for this trade (Required: ₹{estimatedMargin.toLocaleString('en-IN')}). Switch to Paper mode or add funds.
+              </span>
             </div>
           )}
 
@@ -390,24 +395,36 @@ export const OptionTradeModal: React.FC<OptionTradeModalProps> = ({
               >
                 Cancel
               </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className={`px-5 py-2 rounded-xl text-xs font-bold text-white shadow-md transition-all flex items-center gap-1.5 ${
-                  side === 'BUY'
-                    ? 'bg-blue-600 hover:bg-blue-700 active:scale-95'
-                    : 'bg-red-600 hover:bg-red-700 active:scale-95'
-                }`}
-              >
-                {loading ? (
-                  <span>Submitting...</span>
-                ) : (
-                  <>
-                    <Zap className="w-3.5 h-3.5" />
-                    <span>{side} {totalQuantity} Qty</span>
-                  </>
-                )}
-              </button>
+              {(() => {
+                const isInsufficient = mode === 'LIVE' && availableMargin !== null && (availableMargin <= 0 || estimatedMargin > availableMargin);
+                return (
+                  <button
+                    type="submit"
+                    disabled={loading || isInsufficient}
+                    className={`px-5 py-2 rounded-xl text-xs font-bold text-white shadow-md transition-all flex items-center gap-1.5 ${
+                      isInsufficient
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none'
+                        : side === 'BUY'
+                        ? 'bg-blue-600 hover:bg-blue-700 active:scale-95'
+                        : 'bg-red-600 hover:bg-red-700 active:scale-95'
+                    }`}
+                  >
+                    {loading ? (
+                      <span>Submitting...</span>
+                    ) : isInsufficient ? (
+                      <>
+                        <ShieldAlert className="w-3.5 h-3.5" />
+                        <span>Insufficient Margin (Live Blocked)</span>
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-3.5 h-3.5" />
+                        <span>{side} {totalQuantity} Qty {mode === 'PAPER' ? '(Paper)' : '(Live)'}</span>
+                      </>
+                    )}
+                  </button>
+                );
+              })()}
             </div>
           </div>
         </form>

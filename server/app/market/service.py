@@ -32,6 +32,7 @@ class MarketDataService:
     def __init__(self, adapter: Optional[BrokerAdapter] = None):
         self._adapter: BrokerAdapter = adapter or KotakNeoAdapter()
         self._cached_quotes: Dict[str, Quote] = {}
+        self._cached_option_quotes: Dict[str, Quote] = {}
         self._active_connections: Set[WebSocket] = set()
         self._strategy_subscribers: List[Callable[[Quote], Any]] = []
         self._lock = asyncio.Lock()
@@ -172,10 +173,47 @@ class MarketDataService:
                 for ws in dead:
                     self._active_connections.discard(ws)
 
+    def get_cached_option_quote(self, symbol: str, token: Optional[str] = None) -> Optional[Quote]:
+        """Look up cached option quote across multiple normalization keys (symbol, token, spaceless, compact)."""
+        import re
+        s_clean = symbol.strip().upper()
+        if s_clean in self._cached_option_quotes:
+            return self._cached_option_quotes[s_clean]
+        if s_clean in self._cached_quotes:
+            return self._cached_quotes[s_clean]
+
+        s_spaceless = re.sub(r'\s+', '', s_clean)
+        if s_spaceless in self._cached_option_quotes:
+            return self._cached_option_quotes[s_spaceless]
+        if s_spaceless in self._cached_quotes:
+            return self._cached_quotes[s_spaceless]
+
+        if token:
+            tok_clean = token.strip().upper()
+            if tok_clean in self._cached_option_quotes:
+                return self._cached_option_quotes[tok_clean]
+            if "|" in tok_clean and tok_clean.split("|")[1] in self._cached_option_quotes:
+                return self._cached_option_quotes[tok_clean.split("|")[1]]
+
+        for k, v in self._cached_option_quotes.items():
+            k_spaceless = re.sub(r'\s+', '', k)
+            if k_spaceless == s_spaceless:
+                return v
+
+        return None
+
     async def get_quotes(self, symbols: Optional[List[str]] = None) -> List[Quote]:
-        """Get latest cached quotes or fetch on-demand."""
+        """Get latest cached quotes or fetch on-demand with Option Chain cache fallback."""
         syms = symbols or DEFAULT_WATCHLIST
-        # Check cache
+        # 1. Fill from option quote cache if available
+        for s in syms:
+            s_up = s.upper()
+            if s_up not in self._cached_quotes:
+                cached_opt = self.get_cached_option_quote(s)
+                if cached_opt:
+                    self._cached_quotes[s_up] = cached_opt
+
+        # 2. Check remaining cache misses
         needed_fetch = [s for s in syms if s.upper() not in self._cached_quotes]
         if needed_fetch:
             new_quotes = await self._adapter.get_quotes(needed_fetch)
@@ -185,8 +223,55 @@ class MarketDataService:
         return [self._cached_quotes[s.upper()] for s in syms if s.upper() in self._cached_quotes]
 
     async def get_option_chain(self, underlying: str, expiry: Optional[str] = None) -> OptionChain:
-        """Fetch option chain from active adapter."""
-        return await self._adapter.get_option_chain(underlying, expiry)
+        """Fetch option chain from active adapter and prime option quote cache."""
+        import re
+        chain = await self._adapter.get_option_chain(underlying, expiry)
+        und_clean = underlying.strip().upper()
+        exch = "BSE" if "SENSEX" in und_clean else "NSE"
+
+        # Prime all strike contracts into option quote cache for instantaneous order fill & margin check
+        for strike in chain.strikes:
+            for opt in (strike.call, strike.put):
+                if not opt:
+                    continue
+                q = Quote(
+                    symbol=opt.symbol,
+                    exchange=exch,
+                    token=opt.token,
+                    ltp=opt.ltp,
+                    prev_close=opt.prev_close or opt.ltp,
+                    change=opt.change or 0.0,
+                    change_percent=round(((opt.change or 0.0) / (opt.prev_close or opt.ltp or 1.0)) * 100, 2) if (opt.prev_close or opt.ltp) else 0.0,
+                    volume=opt.volume or 0,
+                    bid=opt.bid,
+                    ask=opt.ask,
+                    open_interest=int(opt.open_interest) if opt.open_interest else None
+                )
+                # Key 1: Direct contract symbol (e.g. NIFTY2026112625800CE)
+                self._cached_quotes[opt.symbol.upper()] = q
+                self._cached_option_quotes[opt.symbol.upper()] = q
+
+                # Key 2: Spaced contract symbol (e.g. NIFTY 25800 CE)
+                spaced_key = f"{und_clean} {int(opt.strike_price)} {opt.option_type}".upper()
+                self._cached_quotes[spaced_key] = q
+                self._cached_option_quotes[spaced_key] = q
+
+                # Key 3: Spaceless key (e.g. NIFTY25800CE)
+                compact_key = f"{und_clean}{int(opt.strike_price)}{opt.option_type}".upper()
+                self._cached_quotes[compact_key] = q
+                self._cached_option_quotes[compact_key] = q
+
+                # Key 4: Token key
+                if opt.token:
+                    tok_u = opt.token.upper()
+                    self._cached_quotes[tok_u] = q
+                    self._cached_option_quotes[tok_u] = q
+                    if "|" in tok_u:
+                        bare_tok = tok_u.split("|")[1]
+                        self._cached_quotes[bare_tok] = q
+                        self._cached_option_quotes[bare_tok] = q
+
+        return chain
 
     async def get_expiries(self, underlying: str) -> List[str]:
         """Fetch expiries for underlying."""
